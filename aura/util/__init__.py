@@ -1,1 +1,2 @@
-from .zip import get_comments, get_elements
+from .zip import get_comments
+from .xml import get_elements
