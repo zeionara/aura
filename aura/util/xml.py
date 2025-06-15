@@ -4,7 +4,7 @@ from lxml import etree
 WORD_NAMESPACE = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
 
 
-def get_xml_text(root):
+def get_text(root):
     return root.xpath('string(.)', namespaces = WORD_NAMESPACE)
 
 
@@ -54,3 +54,14 @@ def get_elements(content: etree.XML, comments: dict = None):
         raise ValueError(f'Left {n_comments} unresolved comments')
 
     return elements_with_comments
+
+
+def get_paragraph_style(paragraph: etree.Element):
+    styles = paragraph.xpath('.//w:pStyle', namespaces = WORD_NAMESPACE)
+
+    if len(styles) > 0:
+        values = styles[0].xpath('.//@w:val', namespaces = WORD_NAMESPACE)
+        if len(values) > 0:
+            return values[0]
+
+    return None

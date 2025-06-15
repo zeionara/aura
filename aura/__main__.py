@@ -3,7 +3,8 @@ from os import walk, path as os_path
 
 from click import group, argument
 
-from .util import get_comments, get_elements
+from .util import get_comments, get_elements, get_paragraph_style
+from .document import Paragraph
 
 
 RAW_DATA_PATH = 'assets/data/raw'
@@ -31,7 +32,13 @@ def prepare_corpus(input_path: str, output_path: str):
             print()
 
             for element, comments in elements:
-                print(element, 0 if comments is None else len(comments))
+                if element.tag.endswith('}p'):
+                    paragraph = Paragraph.from_xml(element)
+
+                    if paragraph:
+                        print(paragraph.json)
+
+                # print(element, 0 if comments is None else len(comments))
 
 
 if __name__ == '__main__':
