@@ -6,7 +6,7 @@ from click import group, argument, option
 
 from .util import get_comments, get_elements  # , get_paragraph_style
 from .document import Paragraph, Table, INDENT
-from .embedder import EmbedderType, BaseModel, FlatEmbedder
+from .embedder import EmbedderType, BaseModel, FlatEmbedder, StructuredEmbedder
 
 
 RAW_DATA_PATH = 'assets/data/raw'
@@ -27,17 +27,30 @@ def main():
 def embed(input_path: str, output_path: str, architecture: EmbedderType, model: BaseModel, cpu: bool):
     if architecture == EmbedderType.FLAT:
         embedder = FlatEmbedder(model, cuda = not cpu)
+    elif architecture == EmbedderType.STRUCTURED:
+        embedder = StructuredEmbedder(model, cuda = not cpu)
+    else:
+        raise ValueError('Unsupported embedder architecture')
 
     for root, _, files in walk(input_path):
-        for file in files:
+        for filename in files:
+            if not filename.endswith('json'):
+                continue
+
             print()
-            print(file)
+            print(filename)
             print()
 
-            with open(os_path.join(root, file), 'r') as file:
+            with open(os_path.join(root, filename), 'r') as file:
                 data = load(file)
 
             embedder.embed(data['elements'])
+
+            if not os_path.isdir(output_path):
+                mkdir(output_path)
+
+            with open(os_path.join(output_path, filename), 'w') as file:
+                dump(data, file, indent = INDENT, ensure_ascii = False)
 
 
 @main.command()

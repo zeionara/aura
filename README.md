@@ -20,5 +20,13 @@ pip install lxml transformers torch torchvision torchaudio
 Run the following command which will read data from `assets/data/raw` and save results to `assets/data/prepared`, one output `json` file per one input `docx` file:
 
 ```sh
-python -m aura prepare-corpus
+python -m aura prepare
+```
+
+### Embed document elements
+
+To generate embeddings run the following command which takes as input embedder type and base model:
+
+```sh
+python -m aura embed
 ```
