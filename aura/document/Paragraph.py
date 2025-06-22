@@ -17,6 +17,7 @@ class Paragraph(ReferentiableObject, Item):
     def __init__(self, xml: etree.Element, text: str, style: str, id_: str = None):
         self.xml = xml
         self.text = text
+        self.embeddings = {}
 
         self.style = style
 
@@ -45,7 +46,7 @@ class Paragraph(ReferentiableObject, Item):
             'id': self.id,
             'text': self.text,
             'style': self.style,
-            'embedding': '<a long array of numbers>'
+            'embeddings': self.embeddings
         }
 
         if INCLUDE_XML:

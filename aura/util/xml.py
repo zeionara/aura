@@ -4,8 +4,12 @@ from lxml import etree
 WORD_NAMESPACE = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
 
 
-def get_text(root):
+def get_text(root: etree.Element):
     return root.xpath('string(.)', namespaces = WORD_NAMESPACE)
+
+
+def get_xml(root: etree.Element):
+    return etree.tostring(root, encoding = str)
 
 
 def iterchildren(element: etree.Element):
@@ -63,5 +67,30 @@ def get_paragraph_style(paragraph: etree.Element):
         values = styles[0].xpath('.//@w:val', namespaces = WORD_NAMESPACE)
         if len(values) > 0:
             return values[0]
+
+    return None
+
+
+def should_merge_vertically(cell: etree.Element):
+    vmerges = cell.xpath('.//w:vMerge', namespaces = WORD_NAMESPACE)
+
+    if len(vmerges) > 0:
+        values = vmerges[0].xpath('.//@w:val', namespaces = WORD_NAMESPACE)
+
+        if len(values) > 0:
+            return values[0] != 'restart'
+        else:
+            return True
+
+    return False
+
+
+def get_horizontal_span_size(cell: etree.Element):
+    hspans = cell.xpath('.//w:gridSpan', namespaces = WORD_NAMESPACE)
+
+    if len(hspans) > 0:
+        values = hspans[0].xpath('.//@w:val', namespaces = WORD_NAMESPACE)
+        if len(values) > 0:
+            return int(values[0])
 
     return None

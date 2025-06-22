@@ -17,7 +17,7 @@ pip install lxml
 
 ### Read docx files and parse annotations
 
-Run the following command which will read data from `assets/data/raw` and log the results:
+Run the following command which will read data from `assets/data/raw` and save results to `assets/data/prepared`, one output `json` file per one input `docx` file:
 
 ```sh
 python -m aura prepare-corpus
