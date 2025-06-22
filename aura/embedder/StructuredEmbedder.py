@@ -92,4 +92,4 @@ class StructuredEmbedder:
                 if (structured_embeddings := element['embeddings'].get('structured')) is None: 
                     element['embeddings']['structured'] = {self.model.model_name: average_outputs.detach().cpu().numpy().tolist()}
                 else:
-                    structured_embeddings[self.model_name] = average_outputs.detach().cpu().numpy().tolist()
+                    structured_embeddings[self.model.model_name] = average_outputs.detach().cpu().numpy().tolist()
