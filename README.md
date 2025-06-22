@@ -10,7 +10,7 @@ Run the following sequence of commands to create and setup a project environment
 conda create -n aura python=3.12
 conda activate aura
 conda install python-lsp-server click
-pip install lxml transformers torch torchvision torchaudio
+pip install lxml transformers torch torchvision torchaudio pandas scikit-learn
 ```
 
 ## Usage
