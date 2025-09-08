@@ -1,11 +1,17 @@
 from transformers import AutoTokenizer, AutoModel
 
-from torch import Tensor, ones_like, cat as torch_cat
+from torch import Tensor, ones_like, cat as torch_cat, tensor, mean as torch_mean
 import torch.nn.functional as F
 
 from .BaseModel import BaseModel
 from .util import to_cuda
 
+
+def embedding_to_list(embedding: Tensor | list):
+    try:
+        return embedding.tolist()
+    except AttributeError:
+        return embedding
 
 def average_pool(  # compute average token embeddings for each input document
     last_hidden_states: Tensor,
@@ -84,7 +90,13 @@ class FlatEmbedder:
             'attention_mask': torch_cat(all_padded_attention_masks, dim = 0)
         }
 
-    def embed(self, elements: list[dict], batch_size: int = 8, max_length: int = 512):
+    def set_element_embedding(self, element: dict, embedding: Tensor):
+        if (flat_embeddings := element['embeddings'].get('flat')) is None: 
+            element['embeddings'] = {'flat': {self.model_name: embedding_to_list(embedding)}}
+        else:
+            flat_embeddings[self.model_name] = embedding_to_list(embedding)
+
+    def embed(self, elements: list[dict], batch_size: int = 4, max_length: int = 512):
         batches = split_into_batches(elements, batch_size)
 
         for batch in batches:
@@ -93,7 +105,10 @@ class FlatEmbedder:
             else:
                 batch_dicts = []
 
-                for element in batch:
+                i = 0
+                while i < len(batch):
+                    element = batch[i]
+
                     if element['type'] == 'paragraph':
                         batch_dict = self.tokenizer(element['text'], max_length = max_length, padding = True, truncation = True, return_tensors = 'pt')
                         batch_dicts.append(batch_dict)
@@ -104,12 +119,60 @@ class FlatEmbedder:
                             for cell in row
                             if cell.get('text')
                         ]
-                        batch_dict = self.tokenizer(cells, max_length = max_length, padding = True, truncation = True, return_tensors = 'pt')
-                        batch_dicts.append(join_table_batch_dict(batch_dict))
+
+                        if len(cells) > 1:
+                            next_elements = list(cells)
+
+                            for next_element in batch[i+1:]:
+                                if next_element['type'] == 'paragraph':
+                                    next_elements.append(next_element['text'])
+                                else:
+                                    break
+
+                            next_elements = [
+                                {
+                                    'type': 'paragraph',
+                                    'text': next_element,
+                                    'embeddings': {}
+                                }
+                                for next_element in next_elements
+                            ]
+
+                            # Recursive call to self.embedding
+
+                            self.embed(
+                                elements = next_elements,
+                                batch_size = batch_size,
+                                max_length = max_length
+                            )
+
+                            # Compute table embedding by averaging cell embeddings
+
+                            embeddings = []
+
+                            for cell in next_elements[:len(cells)]:
+                                embeddings.append(cell['embeddings']['flat'][self.model_name])
+
+                            self.set_element_embedding(element, torch_mean(tensor(embeddings), dim = 0))
+
+                            # Set embeddings for paragraphs following the processed table before another table
+
+                            for next_element in next_elements[len(cells):]:
+                                i += 1
+                                self.set_element_embedding(batch[i], next_element['embeddings']['flat'][self.model_name])
+
+                        # batch_dict = self.tokenizer(cells, max_length = max_length, padding = True, truncation = True, return_tensors = 'pt')
+                        # batch_dicts.append(join_table_batch_dict(batch_dict))
                     else:
                         raise ValueError(f'Unknown element type: {element["type"]}')
 
+                    i += 1
+
+                if len(batch_dicts) < 1:  # if there was a table somewhere in the middle of batch, then all paragraphs are handled, can move to the next batch
+                    continue
+
                 batch_dict = self.join_batch_dicts(batch_dicts)
+                batch = batch[:len(batch_dicts)]  # delete items that were handled after the first table occurrence
 
             if self.cuda:
                 batch_dict = to_cuda(batch_dict)
@@ -120,7 +183,8 @@ class FlatEmbedder:
             text_embeddings = F.normalize(text_embeddings, p = 2, dim = 1)
 
             for embedding, element in zip(extract_element_embeddings(text_embeddings), batch):
-                if (flat_embeddings := element['embeddings'].get('flat')) is None: 
-                    element['embeddings'] = {'flat': {self.model_name: embedding.tolist()}}
-                else:
-                    flat_embeddings[self.model_name] = embedding.tolist()
+                self.set_element_embedding(element, embedding)
+                # if (flat_embeddings := element['embeddings'].get('flat')) is None: 
+                #     element['embeddings'] = {'flat': {self.model_name: embedding.tolist()}}
+                # else:
+                #     flat_embeddings[self.model_name] = embedding.tolist()
