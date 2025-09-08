@@ -119,7 +119,7 @@ class FlatEmbedder:
                             cell
                             for row in element['rows']
                             for cell in row
-                            if cell.get('text')
+                            if cell.get('text') is not None
                         ]
 
                         next_elements = [anchor_cell['text'] for anchor_cell in anchor_cells]
