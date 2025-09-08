@@ -7,15 +7,42 @@ from click import group, argument, option
 from .util import get_comments, get_elements  # , get_paragraph_style
 from .document import Paragraph, Table, INDENT
 from .embedder import EmbedderType, BaseModel, FlatEmbedder, StructuredEmbedder
+from .evaluation import evaluate as run_evaluation, average
 
 
 RAW_DATA_PATH = 'assets/data/raw'
 PREPARED_DATA_PATH = 'assets/data/prepared'
+REPORT_PATH = 'assets/data/report.tsv'
 
 
 @group()
 def main():
     pass
+
+
+@main.command()
+@argument('input-path', type = str, default = PREPARED_DATA_PATH)
+@argument('output-path', type = str, default = REPORT_PATH)
+def evaluate(input_path: str, output_path: str):
+    dfs = []
+
+    for root, _, files in walk(input_path):
+        for filename in files:
+            if not filename.endswith('json'):
+                continue
+
+            print()
+            print(filename)
+            print()
+
+            with open(os_path.join(root, filename), 'r', encoding = 'utf-8') as file:
+                data = load(file)
+
+            df = run_evaluation(data['elements'])
+            dfs.append(df)
+
+    average_df = average(dfs)
+    average_df.to_csv(output_path, sep = '\t')
 
 
 @main.command()
