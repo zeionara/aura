@@ -113,7 +113,7 @@ def prepare(input_path: str, output_path: str):
                                     else:
                                         paragraph_ids.append((paragraph.id, comment.body.score))
 
-                        records.append(paragraph.json)
+                        # records.append(paragraph.json)
 
             for element, comments in elements:
                 if element.tag.endswith('}p'):

@@ -91,6 +91,8 @@ class FlatEmbedder:
         }
 
     def set_element_embedding(self, element: dict, embedding: Tensor):
+        if 'embeddings' not in element:
+            print(element)
         if (flat_embeddings := element['embeddings'].get('flat')) is None: 
             element['embeddings'] = {'flat': {self.model_name: embedding_to_list(embedding)}}
         else:
@@ -113,53 +115,54 @@ class FlatEmbedder:
                         batch_dict = self.tokenizer(element['text'], max_length = max_length, padding = True, truncation = True, return_tensors = 'pt')
                         batch_dicts.append(batch_dict)
                     elif element['type'] == 'table':
-                        cells = [
-                            cell['text']
+                        anchor_cells = [
+                            cell
                             for row in element['rows']
                             for cell in row
                             if cell.get('text')
                         ]
 
-                        if len(cells) > 1:
-                            next_elements = list(cells)
+                        next_elements = [anchor_cell['text'] for anchor_cell in anchor_cells]
 
-                            for next_element in batch[i+1:]:
-                                if next_element['type'] == 'paragraph':
-                                    next_elements.append(next_element['text'])
-                                else:
-                                    break
+                        for next_element in batch[i+1:]:
+                            if next_element['type'] == 'paragraph':
+                                next_elements.append(next_element['text'])
+                            else:
+                                break
 
-                            next_elements = [
-                                {
-                                    'type': 'paragraph',
-                                    'text': next_element,
-                                    'embeddings': {}
-                                }
-                                for next_element in next_elements
-                            ]
+                        next_elements = [
+                            {
+                                'type': 'paragraph',
+                                'text': next_element,
+                                'embeddings': {}
+                            }
+                            for next_element in next_elements
+                        ]
 
-                            # Recursive call to self.embedding
+                        # Recursive call to self.embedding
 
-                            self.embed(
-                                elements = next_elements,
-                                batch_size = batch_size,
-                                max_length = max_length
-                            )
+                        self.embed(
+                            elements = next_elements,
+                            batch_size = batch_size,
+                            max_length = max_length
+                        )
 
-                            # Compute table embedding by averaging cell embeddings
+                        # Compute table embedding by averaging cell embeddings
 
-                            embeddings = []
+                        embeddings = []
 
-                            for cell in next_elements[:len(cells)]:
-                                embeddings.append(cell['embeddings']['flat'][self.model_name])
+                        for next_element, anchor_cell in zip(next_elements[:len(anchor_cells)], anchor_cells):
+                            cell_embedding = next_element['embeddings']['flat'][self.model_name]
+                            self.set_element_embedding(anchor_cell, cell_embedding)
+                            embeddings.append(cell_embedding)
 
-                            self.set_element_embedding(element, torch_mean(tensor(embeddings), dim = 0))
+                        self.set_element_embedding(element, torch_mean(tensor(embeddings), dim = 0))
 
-                            # Set embeddings for paragraphs following the processed table before another table
+                        # Set embeddings for paragraphs following the processed table before another table
 
-                            for next_element in next_elements[len(cells):]:
-                                i += 1
-                                self.set_element_embedding(batch[i], next_element['embeddings']['flat'][self.model_name])
+                        for next_element in next_elements[len(anchor_cells):]:
+                            i += 1
+                            self.set_element_embedding(batch[i], next_element['embeddings']['flat'][self.model_name])
 
                         # batch_dict = self.tokenizer(cells, max_length = max_length, padding = True, truncation = True, return_tensors = 'pt')
                         # batch_dicts.append(join_table_batch_dict(batch_dict))

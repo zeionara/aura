@@ -117,7 +117,8 @@ class Cell(ReferentiableObject):
             'id': self.id,
             'text': self.text,
             'rows': self.n_rows,
-            'cols': self.n_cols
+            'cols': self.n_cols,
+            'embeddings': {}
         }
 
     @staticmethod
