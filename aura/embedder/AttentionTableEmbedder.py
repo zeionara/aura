@@ -1,80 +1,84 @@
 from transformers import AutoModel
-from torch import reshape, cat
-from torch.nn import Module, Linear
+from torch import reshape, cat, Tensor, mean, stack, save
+from torch.nn import Module, Linear, MultiheadAttention
 from torch.nn.functional import pad, softmax
 
 
 class AttentionTableEmbedder(Module):
 
-    def __init__(self, model: str, cuda: bool = True):
-        super().__init__()
+    def __init__(self, d: int = 1024, num_heads: int = 8, dropout: float = 0.1, ff_hidden_dim: int = 1024):
+        super(AttentionTableEmbedder, self).__init__()
 
-        self.model_name = model
-        self.model = model = AutoModel.from_pretrained(model)
+        self.d = d
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.ff_hidden_dim = ff_hidden_dim
 
-        self.hidden_size = hidden_size = model.config.hidden_size
+        self.row_q_proj = Linear(ff_hidden_dim, d)
+        self.row_k_proj = Linear(ff_hidden_dim, d)
+        self.row_v_proj = Linear(ff_hidden_dim, d)
 
-        self.cell_wise_attention = cell_wise_attention = Linear(hidden_size, 1)
-        self.row_wise_attention = row_wise_attention = Linear(hidden_size, 1)
-        self.column_wise_attention = column_wise_attention = Linear(hidden_size, 1)
+        self.row_attention = MultiheadAttention(embed_dim = d, num_heads = num_heads, dropout = dropout, batch_first = True)
+        self.row_output = Linear(d, d)
 
-        self.table_wise_attention = table_wise_attention = Linear(hidden_size, 1)
+        self.col_q_proj = Linear(ff_hidden_dim, d)
+        self.col_k_proj = Linear(ff_hidden_dim, d)
+        self.col_v_proj = Linear(ff_hidden_dim, d)
 
-        if cuda:
-            model.to('cuda')
+        self.col_attention = MultiheadAttention(embed_dim = d, num_heads = num_heads, dropout = dropout, batch_first = True)
+        self.col_output = Linear(d, d)
 
-            row_wise_attention.to('cuda')
-            column_wise_attention.to('cuda')
-            table_wise_attention.to('cuda')
+        self.tab_q_proj = Linear(d, d)
+        self.tab_k_proj = Linear(d, d)
+        self.tab_v_proj = Linear(d, d)
 
-    def forward(self, *args, n_levels: int, **kwargs):
-        # embedding
+        self.tab_attention = MultiheadAttention(embed_dim = d, num_heads = num_heads, dropout = dropout, batch_first = True)
+        self.tab_output = Linear(d, d)
 
-        embeddings = self.model(*args, **kwargs).last_hidden_state
-        embeddings = embeddings.masked_fill(~kwargs['attention_mask'][..., None].bool(), 0.0)
+    def forward(self, rows: list[Tensor], cols: list[Tensor]) -> Tensor:
+        embedded_rows = []
+        embedded_cols = []
 
-        # cell-wise attention
+        for row in rows:
+            attention_output, _ = self.row_attention(
+               self.row_q_proj(row),
+               self.row_k_proj(row),
+               self.row_v_proj(row)
+            )
+            row_output = self.row_output(attention_output)
 
-        x = embeddings
-        a, b, c = x.shape
+            print(row_output.shape)
 
-        attn_scores = self.cell_wise_attention(x)
-        attn_weights = softmax(attn_scores, dim = 1)
-        attn_weights = attn_weights.expand(-1, -1, c)
-        x_weighted = (x * attn_weights).sum(dim = 1)
+            pooled = mean(row_output, dim = 0)  # TODO: apply NN
 
-        cell_embeddings = x_weighted
+            embedded_rows.append(pooled)
 
-        new_shape = (n_levels, cell_embeddings.shape[0] // n_levels) + cell_embeddings.shape[1:]
-        embeddings = reshape(cell_embeddings, new_shape)
+        for col in cols:
+            attention_output, _ = self.row_attention(
+               self.row_q_proj(col),
+               self.row_k_proj(col),
+               self.row_v_proj(col)
+            )
+            col_output = self.col_output(attention_output)
+            pooled = mean(col_output, dim = 0)  # TODO: apply NN
+            embedded_cols.append(pooled)
 
-        # row-wise attention
+        combined_vectors = stack(embedded_rows + embedded_cols, dim = 0)
+        attention_output, _ = self.tab_attention(
+            self.tab_q_proj(combined_vectors),
+            self.tab_k_proj(combined_vectors),
+            self.tab_v_proj(combined_vectors)
+        )
+        tab_output = self.tab_output(attention_output)
+        tab_embedding = mean(tab_output, dim = 0)
 
-        x = embeddings
+        return tab_embedding
 
-        attn_scores = self.row_wise_attention(x)
-        attn_weights = softmax(attn_scores, dim = 1)
-        attn_weights = attn_weights.expand(-1, -1, c)
-        x_weighted = (x * attn_weights).sum(dim = 1)
-
-        row_embeddings = x_weighted
-
-        # column-wise attention
-
-        x_ = x.permute(1, 0, 2)
-
-        attn_scores = self.column_wise_attention(x_)
-        attn_weights = softmax(attn_scores, dim = 1)
-        x_weighted = (x_ * attn_weights).sum(dim = 1)
-
-        column_embeddings = x_weighted
-
-        # global attention
-
-        x = cat((row_embeddings, column_embeddings), dim = 0)
-
-        attn_scores = self.table_wise_attention(x)
-        attn_weights = softmax(attn_scores, dim = 0)
-        x_weighted = (x * attn_weights).sum(dim = 0)
-
-        return x_weighted
+    def save(self, filepath: str):
+        save({
+            'model_state_dict': self.state_dict(),
+            'd': self.d,
+            'num_heads': self.num_heads,
+            'dropout': self.dropout,
+            'ff_hidden_dim': self.ff_hidden_dim
+        }, filepath)
