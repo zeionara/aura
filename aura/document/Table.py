@@ -7,6 +7,7 @@ from lxml import etree
 from .ReferentiableObject import ReferentiableObject
 from .Item import Item, INCLUDE_XML, INDENT
 from .Cell import Cell
+from .Comment import Comment
 
 from .util import get_aligned_cell
 from ..util.string import normalize_spaces, drop_space_around_punctuation
@@ -19,10 +20,11 @@ NOTE_PATTERN = re.compile(r'([*]+)\s+([^*]+[^*\s])')
 class Table(ReferentiableObject, Item):
     type_label: ClassVar[str] = 'table'
 
-    def __init__(self, xml: etree.Element, rows: list[list[Cell]], label: str, context: list[str] = None, id_: str = None):
+    def __init__(self, xml: etree.Element, rows: list[list[Cell]], label: str, comments: tuple[Comment], context: list[str] = None, id_: str = None):
         self.rows = rows
         self.xml = xml
         self.embeddings = {}
+        self.comments = comments
         self.context = context
 
         # self.id = id_
@@ -33,7 +35,7 @@ class Table(ReferentiableObject, Item):
         super().__init__(id_)
 
     @classmethod
-    def from_xml(cls, xml: etree.Element, label: str = None, context: list[str] = None):
+    def from_xml(cls, xml: etree.Element, label: str = None, comments: tuple[Comment] = None, context: list[str] = None):
         rows = []
         last_row = None
 
@@ -87,7 +89,7 @@ class Table(ReferentiableObject, Item):
                     if cell.text is not None and cell.text.endswith(key):
                         cell.text = normalize_spaces(f'{cell.text} ({notes[key]})')
 
-        return cls(xml, rows, label, context)
+        return cls(xml, rows, label, comments, context)
 
     @property
     def content(self):
@@ -110,6 +112,9 @@ class Table(ReferentiableObject, Item):
 
         if (label := self.label) is not None:
             data['label'] = label
+
+        if (comments := self.comments) is not None:
+            data['comments'] = [comment.json for comment in comments]
 
         if (context := self.context) is not None:
             data['context'] = context

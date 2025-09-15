@@ -6,6 +6,7 @@ from lxml import etree
 
 from .ReferentiableObject import ReferentiableObject
 from .Item import Item, INDENT, INCLUDE_XML
+from .Comment import Comment
 
 from ..util.xml import get_text, get_paragraph_style
 from ..util.string import normalize_spaces
@@ -14,17 +15,18 @@ from ..util.string import normalize_spaces
 class Paragraph(ReferentiableObject, Item):
     type_label: ClassVar[str] = 'paragraph'
 
-    def __init__(self, xml: etree.Element, text: str, style: str, id_: str = None):
+    def __init__(self, xml: etree.Element, text: str, style: str, id_: str = None, comments: tuple[Comment] = None):
         self.xml = xml
         self.text = text
         self.embeddings = {}
+        self.comments = comments
 
         self.style = style
 
         super().__init__(id_)
 
     @classmethod
-    def from_xml(cls, xml: etree.Element):
+    def from_xml(cls, xml: etree.Element, comments: tuple[Comment] = None):
         text = normalize_spaces(get_text(xml))
 
         if not text:
@@ -33,7 +35,8 @@ class Paragraph(ReferentiableObject, Item):
         return cls(
             xml,
             text = text,
-            style = get_paragraph_style(xml)
+            style = get_paragraph_style(xml),
+            comments = comments
         )
 
     @property
@@ -51,6 +54,9 @@ class Paragraph(ReferentiableObject, Item):
 
         if INCLUDE_XML:
             data['xml'] = str(self.soup)
+
+        if self.comments is not None:
+            data['comments'] = [comment.json for comment in self.comments]
 
         if path is not None:
             with open(path, 'w', encoding = 'utf-8') as file:

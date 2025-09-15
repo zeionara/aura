@@ -1,11 +1,11 @@
 import re
 
 from transformers import AutoTokenizer, AutoModel
-from torch import tensor as torch_tensor, stack as torch_stack, device
+from torch import tensor as torch_tensor, stack as torch_stack, device, Tensor
 import torch.nn.functional as F
 
 from .AttentionTableEmbedder import AttentionTableEmbedder
-from .FlatEmbedder import average_pool, split_into_batches
+from .FlatEmbedder import embedding_to_list
 from .BaseModel import BaseModel
 from .util import to_cuda
 
@@ -91,16 +91,13 @@ class StructuredEmbedder:
 
         return row_embeddings, col_embeddings
 
-        if table['rows'][0][0]['text'] == 'Контролируемый параметр':
-            print('Row-wise embeddings:')
-
-            for tensor in row_embeddings:
-                print(tensor.shape)
-
-            print('Column-wise embeddings:')
-
-            for tensor in col_embeddings:
-                print(tensor.shape)
+    def set_element_embedding(self, element: dict, embedding: Tensor):
+        if 'embeddings' not in element:
+            print(element)
+        if (structured_embeddings := element['embeddings'].get('structured')) is None: 
+            element['embeddings']['structured'] = {self.base_model: embedding_to_list(embedding)}
+        else:
+            structured_embeddings[self.base_model] = embedding_to_list(embedding)
 
     def embed(self, elements: list[dict], batch_size: int = 8, max_length: int = 512):  # TODO: Add batch size
         for element in elements:
@@ -111,12 +108,9 @@ class StructuredEmbedder:
                     print(element)
                     raise ValueError(f'Please, apply flat embedder first for model {self.base_model}')
             elif element['type'] == 'table':
-                # batch_dict, n_levels = self.tokenize_table(element, max_length = max_length, batch_size = batch_size)
-
                 embedding = self.model(
                     *self.tokenize_table(element, batch_size = batch_size, max_length = max_length)
                 )
-
-                print(embedding.shape)
+                self.set_element_embedding(element, embedding)
 
         self.model.save('/tmp/weights.pkl')

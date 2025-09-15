@@ -30,9 +30,35 @@ class CommentBody:
     def __repr__(self):
         return f"CommentBody(id={self.id}, target={self.target}, score={self.score}, note={self.note})"
 
+    def to_json(self):
+        if self.id is None:
+            return {
+                'target': self.target,
+                'score': self.score,
+                'note': self.note
+            }
+        else:
+            return {
+                'id': self.id
+            }
+
+    @property
+    def json(self):
+        return self.to_json()
+
 
 @dataclass
 class Comment:
     id: int
     body: CommentBody
     target: etree.Element = None
+
+    def to_json(self):
+        return {
+            'id': self.id,
+            'body': self.body.json
+        }
+
+    @property
+    def json(self):
+        return self.to_json()

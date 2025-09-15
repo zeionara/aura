@@ -3,6 +3,7 @@ from pathlib import Path
 from json import dump, load
 
 from click import group, argument, option
+from queue import Queue
 
 from .util import get_comments, get_elements  # , get_paragraph_style
 from .document import Paragraph, Table, INDENT
@@ -99,10 +100,12 @@ def prepare(input_path: str, output_path: str):
             records = []
 
             label_to_paragraph_ids = {}
+            paragraphs = Queue()
 
             for element, comments in elements:
                 if element.tag.endswith('}p'):
-                    paragraph = Paragraph.from_xml(element)
+                    paragraph = Paragraph.from_xml(element, comments)
+                    paragraphs.put(paragraph)
 
                     if paragraph:
                         if comments is not None:
@@ -117,7 +120,8 @@ def prepare(input_path: str, output_path: str):
 
             for element, comments in elements:
                 if element.tag.endswith('}p'):
-                    paragraph = Paragraph.from_xml(element)
+                    # paragraph = Paragraph.from_xml(element, comments)
+                    paragraph = paragraphs.get()
 
                     if paragraph:
                         records.append(paragraph.json)
@@ -132,14 +136,15 @@ def prepare(input_path: str, output_path: str):
                     table = Table.from_xml(
                         element,
                         label,
-                        [
-                            paragraph
-                            for paragraph, _ in sorted(
+                        comments,
+                        {
+                            paragraph: score
+                            for paragraph, score in sorted(
                                 label_to_paragraph_ids.get(label),
                                 key = lambda entry: entry[1],
                                 reverse = True
                             )
-                        ] if label in label_to_paragraph_ids else None
+                        } if label in label_to_paragraph_ids else None
                     )
 
                     records.append(table.json)
