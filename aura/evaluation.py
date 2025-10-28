@@ -10,13 +10,38 @@ def compute_ap(ranked_list, relevant_set):
     if not relevant_set:
         return 0.0
 
+    relevant_item_positions = []
+
     hits = 0
     precision_sum = 0.0
     for i, doc_id in enumerate(ranked_list):
         if doc_id in relevant_set:
             hits += 1
             precision_sum += hits / (i + 1)
+            relevant_item_positions.append(i)
+
     return precision_sum / len(relevant_set)
+
+
+def compute_mir(ranked_list, relevant_set):
+    """Compute Mean Inverted Rank (MIR) for binary relevance"""
+    if not relevant_set:
+        return 0.0
+
+    inverted_ranks = []
+
+    for i, doc_id in enumerate(ranked_list):
+        if doc_id in relevant_set:
+            inverted_ranks.append(len(ranked_list) - i - 1)
+
+
+    if len(inverted_ranks) < 1:
+        return 0.0
+
+    if len(inverted_ranks) < 2:
+        return inverted_ranks[0]
+
+    return sum(inverted_ranks) / len(inverted_ranks)
 
 
 def compute_mrr(ranked_list, relevant_set):
@@ -172,6 +197,11 @@ def evaluate(elements):
                     except Exception:
                         mrr = np.nan
 
+                    try:
+                        mir = compute_mir(ranked_list, binary_relevance)
+                    except Exception:
+                        mir = np.nan
+
                     # Store results
                     if not np.isnan(ndcg):
                         results[model][emb_type][dist_metric]['NDCG'].append(ndcg)
@@ -179,13 +209,15 @@ def evaluate(elements):
                         results[model][emb_type][dist_metric]['MAP'].append(ap)
                     if not np.isnan(mrr):
                         results[model][emb_type][dist_metric]['MRR'].append(mrr)
+                    if not np.isnan(mir):
+                        results[model][emb_type][dist_metric]['MIR'].append(mir)
 
     # Prepare final dataframe
     rows = []
     columns = set()
 
     # Collect all unique evaluation metrics and distance metrics
-    eval_metrics = ['NDCG', 'MAP', 'MRR']
+    eval_metrics = ['NDCG', 'MAP', 'MRR', 'MIR']
     dist_metrics = ['cosine', 'euclidean', 'dot']
 
     for model in all_models:
@@ -227,6 +259,8 @@ def evaluate(elements):
         columns,
         names=['Evaluation Metric', 'Distance Metric']
     )
+
+    print(df)
 
     return df
 
