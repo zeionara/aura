@@ -207,7 +207,7 @@ def prepare(input_path: str, output_path: str, annotations_document_path: str):
                             if xml is None:
                                 logger.warning('Missing xml for paragraph %s', paragraph)
                             else:
-                                doc.append(xml)
+                                doc.append(doc.remove_style(xml))
                     elif label is not None:
                         logger.warning('Table %s is missing annotations', label)
 

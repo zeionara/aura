@@ -18,6 +18,7 @@ with open(os.path.join(DOCX_ELEMENT_TEMPLATE_PATH, 'paragraph.xml'), 'r', encodi
 
 BOOKMARK_START = re.compile(r'<w:bookmarkStart[^>]*/>')
 BOOKMARK_END = re.compile(r'<w:bookmarkEnd[^>]*/>')
+STYLE_TAG = re.compile(r'<w:pStyle[^>]*/>')
 
 
 class Document:
@@ -28,6 +29,11 @@ class Document:
     def _remove_bookmarks(self, xml_string: str):
         cleaned = BOOKMARK_START.sub('', xml_string)
         cleaned = BOOKMARK_END.sub('', cleaned)
+
+        return cleaned
+
+    def remove_style(self, xml_string: str):
+        cleaned = STYLE_TAG.sub('', xml_string)
 
         return cleaned
 
