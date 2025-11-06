@@ -13,6 +13,13 @@ conda install python-lsp-server click
 pip install lxml transformers torch torchvision torchaudio pandas scikit-learn
 ```
 
+## Annotation report generation workflow
+
+1. Download annotated `docx` files and put them to folder `$HOME/Document/PhD/<version>`
+2. Upload to remote server: `phdta <version>` (`phdta` is a `bash` function implemented [here](https://github.com/zeionara/shell/blob/71eb0fba4cd0d4af3d4c505d85f71868d88d20c8/phd.sh#L1))
+3. On remote server parse annotations: `phdga <version>` and generate report
+4. Download report from remote server: `phdda <version>`, the report will be located at `$HOME/Documents/PhD/<version>.docx`
+
 ## Usage
 
 ### Prepare input documents

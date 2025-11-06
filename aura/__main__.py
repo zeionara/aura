@@ -246,7 +246,8 @@ def prepare(input_path: str, output_path: str, annotations_document_path: str):
 
         doc.append_h2('Статистические характеристики результатов разметки')
 
-        doc.append_paragraph(f'Количество размеченных документов: {stats.n_documents:.3f}')
+        doc.append_paragraph(f'Количество размеченных документов: {stats.n_documents}')
+        doc.append_paragraph(f'Количество размеченных таблиц: {sum(stats.n_tables)}')
 
         doc.append_paragraph(f'Среднее количество размеченных таблиц в документе: {stats.n_tables_average:.3f}')
         doc.append_paragraph(f'Среднеквадратичное отклонение количества размеченных таблиц в документе: {stats.n_tables_stdev:.3f}')
@@ -257,7 +258,7 @@ def prepare(input_path: str, output_path: str, annotations_document_path: str):
         doc.append_paragraph(f'Среднее количество символов в параграфе контекста (по всем документам): {stats.paragraph_length_average:.3f}')
         doc.append_paragraph(f'Среднеквадратичное отклонение количества символов в параграфе контекста (по всем документам): {stats.paragraph_length_stdev:.3f}')
 
-        n_stats_elements = 8
+        n_stats_elements = 9
 
         for document, document_stats in stats:
             doc.append_h3(f'Документ {document}')
