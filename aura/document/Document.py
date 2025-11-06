@@ -75,3 +75,19 @@ class Document:
                 self.docx.element.body.append(table._element)
 
         self.docx.save(filename)
+
+    def move_last_n_elements(self, n, target_index):
+        elements = self.elements
+
+        if n <= 0:
+            return
+        if n > len(elements):
+            raise ValueError("n cannot be greater than the list length")
+        if not 0 <= target_index <= len(elements) - n:
+            raise IndexError("Target index is out of bounds for valid insertion position")
+
+        elements_to_move = elements[-n:]
+
+        del elements[-n:]
+
+        elements[target_index:target_index] = elements_to_move

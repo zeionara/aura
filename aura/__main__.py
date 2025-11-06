@@ -6,10 +6,11 @@ from logging import getLogger
 
 from click import group, argument, option
 
-from .util import get_comments, get_elements, get_xml  # , get_paragraph_style
+from .util import get_comments, get_elements, get_xml, get_text  # , get_paragraph_style
 from .document import Paragraph, Table, Document, INDENT
 from .embedder import EmbedderType, BaseModel, FlatEmbedder, StructuredEmbedder
 from .evaluation import evaluate as run_evaluation, average
+from .Stats import Stats
 
 
 RAW_DATA_PATH = 'assets/data/raw'
@@ -116,6 +117,8 @@ def prepare(input_path: str, output_path: str, annotations_document_path: str):
         'так и для автоматического аннотирования с использованием больших языковых моделей.'
     ))
 
+    stats = Stats()
+
     # doc.append(paragraph_xml)
     # doc.append(table_xml)
 
@@ -142,6 +145,7 @@ def prepare(input_path: str, output_path: str, annotations_document_path: str):
 
             label_to_paragraph_ids = {}
             paragraph_id_to_xml = {}
+            paragraph_id_to_element = {}
 
             paragraphs = Queue()
 
@@ -168,6 +172,7 @@ def prepare(input_path: str, output_path: str, annotations_document_path: str):
                                         paragraph_ids.append((paragraph.id, comment.body.score))
 
                                     paragraph_id_to_xml[paragraph.id] = get_xml(element)
+                                    paragraph_id_to_element[paragraph.id] = element
 
             # 2. Handle table comments, extract linked paragraphs
 
@@ -193,6 +198,7 @@ def prepare(input_path: str, output_path: str, annotations_document_path: str):
                         doc.append_h5('Содержимое')
 
                         doc.append(get_xml(element))
+                        table_paragraphs = []
 
                         doc.append_h5('Контекст')
 
@@ -208,6 +214,9 @@ def prepare(input_path: str, output_path: str, annotations_document_path: str):
                                 logger.warning('Missing xml for paragraph %s', paragraph)
                             else:
                                 doc.append(doc.remove_style(xml))
+                                table_paragraphs.append(paragraph_id_to_element[paragraph])
+
+                        stats.append_table(file, label, table_paragraphs)
                     elif label is not None:
                         logger.warning('Table %s is missing annotations', label)
 
@@ -235,7 +244,42 @@ def prepare(input_path: str, output_path: str, annotations_document_path: str):
                     }, file, indent = INDENT, ensure_ascii = False
                 )
 
-            doc.to_docx(annotations_document_path)
+        doc.append_h2('Статистические характеристики результатов разметки')
+
+        doc.append_paragraph(f'Количество размеченных документов: {stats.n_documents:.3f}')
+
+        doc.append_paragraph(f'Среднее количество размеченных таблиц в документе: {stats.n_tables_average:.3f}')
+        doc.append_paragraph(f'Среднеквадратичное отклонение количества размеченных таблиц в документе: {stats.n_tables_stdev:.3f}')
+
+        doc.append_paragraph(f'Среднее количество параграфов контекста (по всем документам): {stats.n_paragraphs_average:.3f}')
+        doc.append_paragraph(f'Среднеквадратичное отклонение количества параграфов контекста (по всем документам): {stats.n_paragraphs_stdev:.3f}')
+
+        doc.append_paragraph(f'Среднее количество символов в параграфе контекста (по всем документам): {stats.paragraph_length_average:.3f}')
+        doc.append_paragraph(f'Среднеквадратичное отклонение количества символов в параграфе контекста (по всем документам): {stats.paragraph_length_stdev:.3f}')
+
+        n_stats_elements = 8
+
+        for document, document_stats in stats:
+            doc.append_h3(f'Документ {document}')
+
+            doc.append_paragraph(f'Среднее количество параграфов контекста (по таблицам документа {document}): {document_stats.n_paragraphs_average:.3f}')
+            doc.append_paragraph(f'Среднеквадратичное отклонение количества параграфов контекста (по таблицам документа {document}): {document_stats.n_paragraphs_stdev:.3f}')
+
+            doc.append_paragraph(f'Среднее количество символов в параграфе контекста (по таблицам документа {document}): {document_stats.paragraph_length_average:.3f}')
+            doc.append_paragraph(f'Среднеквадратичное отклонение количества символов в параграфе контекста (по таблицам документа {document}): {document_stats.paragraph_length_stdev:.3f}')
+
+            n_stats_elements += 5
+
+        doc.move_last_n_elements(n_stats_elements, 4)
+
+        with open(output_file, 'w', encoding = 'utf-8') as file:
+            dump(
+                {
+                    'elements': records
+                }, file, indent = INDENT, ensure_ascii = False
+            )
+
+        doc.to_docx(annotations_document_path)
 
 
 if __name__ == '__main__':
