@@ -4,9 +4,13 @@ from torch.nn import Module, Linear, MultiheadAttention, LayerNorm, Dropout, GEL
 from torch.nn.functional import pad, softmax
 
 
+DEFAULT_INPUT_DIM = 1024
+DEFAULT_D = 1024
+
+
 class AttentionTableEmbedder(Module):
 
-    def __init__(self, input_dim: int = 1024, d: int = 1024, num_heads: int = 8, dropout: float = 0.1, ff_hidden_dim: int = 2048):
+    def __init__(self, input_dim: int = DEFAULT_INPUT_DIM, d: int = DEFAULT_D, num_heads: int = 8, dropout: float = 0.1, ff_hidden_dim: int = 2048):
         super(AttentionTableEmbedder, self).__init__()
 
         self.input_dim = input_dim
@@ -79,7 +83,7 @@ class AttentionTableEmbedder(Module):
             Linear(ff_hidden_dim, d)
         )
 
-        self.tab_output = Linear(d, d)
+        self.tab_output = Linear(d, input_dim)
 
         self._init_weights()
 

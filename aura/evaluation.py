@@ -4,6 +4,8 @@ from collections import defaultdict
 from sklearn.metrics import ndcg_score
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 
+from .Subset import Subset
+
 
 def compute_ap(ranked_list, relevant_set):
     """Compute Average Precision (AP) for binary relevance"""
@@ -70,12 +72,16 @@ def compute_ndcg(ranked_list, relevance_scores, k=None):
 
 
 def evaluate(elements):
+    test_paragraph_ids = set()
     paragraphs = []
     tables = []
 
     for elem in elements:
         if elem['type'] == 'paragraph':
             paragraphs.append(elem)
+
+            if (subset := elem['subset']) is not None and Subset(subset) == Subset.TEST:
+                test_paragraph_ids.add(elem['id'])
         elif elem['type'] == 'table':
             tables.append(elem)
 
@@ -98,7 +104,7 @@ def evaluate(elements):
 
     # Process each table
     for table in tables:
-        context = table.get('context', [])
+        context = {paragraph_id: score for paragraph_id, score in table.get('context', {}).items() if paragraph_id in test_paragraph_ids}
 
         # Skip tables without context
         if not context:

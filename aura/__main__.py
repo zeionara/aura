@@ -4,6 +4,7 @@ from queue import Queue
 from json import dump, load
 from logging import getLogger
 from random import seed as random_seed
+from torch import optim
 
 from click import group, argument, option
 
@@ -13,12 +14,14 @@ from .embedder import EmbedderType, BaseModel, FlatEmbedder, StructuredEmbedder
 from .evaluation import evaluate as run_evaluation, average
 from .Stats import Stats
 from .Subset import Subset
+from .embedder.AttentionTableEmbedder import DEFAULT_INPUT_DIM
 
 
 RAW_DATA_PATH = 'assets/data/raw'
 PREPARED_DATA_PATH = 'assets/data/prepared'
 REPORT_PATH = 'assets/data/report.tsv'
 ANNOTATIONS_DOCUMENT_PATH = 'assets/data/annotations.docx'
+MODEL_PARAMS_PATH = None  # 'assets/weights.pth'
 
 DEFAULT_TRAIN_FRACTION = 0.6
 DEFAULT_SEED = 17
@@ -34,9 +37,55 @@ def main():
 
 @main.command()
 @argument('input-path', type = str, default = PREPARED_DATA_PATH)
+@argument('output-path', type = str, default = MODEL_PARAMS_PATH)
+@option('--model', '-m', type = BaseModel, default = BaseModel.E5_LARGE)
+@option('--cpu', '-c', is_flag = True)
+@option('--input-dim', '-d', type = int, default = DEFAULT_INPUT_DIM)
+def train(input_path: str, output_path: str, model: BaseModel, cpu: bool, input_dim: int):
+    embedder = StructuredEmbedder(model, cuda = not cpu, input_dim = input_dim)
+
+    weights_directory = os_path.dirname(output_path)
+
+    if not os_path.isdir(weights_directory):
+        mkdir(weights_directory)
+
+    elements = []
+
+    for root, _, files in walk(input_path):
+        for filename in files:
+            if not filename.endswith('json'):
+                continue
+
+            print(f'Reading {filename}...')
+
+            with open(os_path.join(root, filename), 'r') as file:
+                data = load(file)
+
+            elements.extend(data['elements'])
+
+    print()
+    print('Training...')
+    print()
+
+    optimizer = optim.Adam(embedder.model.parameters(), lr=1e-4)
+    embedder.train(elements, optimizer)
+
+    embedder.save(output_path)
+
+    print()
+    print(f'Saved as {output_path}')
+
+
+@main.command()
+@argument('input-path', type = str, default = PREPARED_DATA_PATH)
 @argument('output-path', type = str, default = REPORT_PATH)
 def evaluate(input_path: str, output_path: str):
     dfs = []
+
+    reports_directory = os_path.dirname(output_path)
+
+    if not os_path.isdir(reports_directory):
+        mkdir(reports_directory)
 
     for root, _, files in walk(input_path):
         for filename in files:
@@ -60,14 +109,16 @@ def evaluate(input_path: str, output_path: str):
 @main.command()
 @argument('input-path', type = str, default = PREPARED_DATA_PATH)
 @argument('output-path', type = str, default = PREPARED_DATA_PATH)
+@option('--model-path', '-p', type = str, default = MODEL_PARAMS_PATH)
 @option('--architecture', '-a', type = EmbedderType, default = EmbedderType.FLAT)
 @option('--model', '-m', type = BaseModel, default = BaseModel.E5_LARGE)
 @option('--cpu', '-c', is_flag = True)
-def embed(input_path: str, output_path: str, architecture: EmbedderType, model: BaseModel, cpu: bool):
+@option('--input-dim', '-d', type = int, default = DEFAULT_INPUT_DIM)
+def embed(input_path: str, output_path: str, model_path: str, architecture: EmbedderType, model: BaseModel, cpu: bool, input_dim: int):
     if architecture == EmbedderType.FLAT:
         embedder = FlatEmbedder(model, cuda = not cpu)
     elif architecture == EmbedderType.STRUCTURED:
-        embedder = StructuredEmbedder(model, cuda = not cpu)
+        embedder = StructuredEmbedder(model, cuda = not cpu, input_dim = input_dim, path = model_path)
     else:
         raise ValueError('Unsupported embedder architecture')
 
