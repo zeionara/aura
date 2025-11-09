@@ -3,6 +3,7 @@ from pathlib import Path
 from queue import Queue
 from json import dump, load
 from logging import getLogger
+from random import seed as random_seed
 
 from click import group, argument, option
 
@@ -11,12 +12,16 @@ from .document import Paragraph, Table, Document, INDENT
 from .embedder import EmbedderType, BaseModel, FlatEmbedder, StructuredEmbedder
 from .evaluation import evaluate as run_evaluation, average
 from .Stats import Stats
+from .Subset import Subset
 
 
 RAW_DATA_PATH = 'assets/data/raw'
 PREPARED_DATA_PATH = 'assets/data/prepared'
 REPORT_PATH = 'assets/data/report.tsv'
 ANNOTATIONS_DOCUMENT_PATH = 'assets/data/annotations.docx'
+
+DEFAULT_TRAIN_FRACTION = 0.6
+DEFAULT_SEED = 17
 
 
 logger = getLogger(__name__)
@@ -91,7 +96,11 @@ def embed(input_path: str, output_path: str, architecture: EmbedderType, model: 
 @argument('input-path', type = str, default = RAW_DATA_PATH)
 @argument('output-path', type = str, default = PREPARED_DATA_PATH)
 @argument('annotations-document-path', type = str, default = ANNOTATIONS_DOCUMENT_PATH)
-def prepare(input_path: str, output_path: str, annotations_document_path: str):
+@option('--train-fraction', '-t', type = float, default = DEFAULT_TRAIN_FRACTION)
+@option('--seed', '-s', type = int, default = DEFAULT_SEED)
+def prepare(input_path: str, output_path: str, annotations_document_path: str, train_fraction: float, seed: int):
+    random_seed(seed)
+
     doc = Document()
 
     doc.append_h1('Результаты разметки контекста таблиц для интерпретации неполных табличных данных')
@@ -164,6 +173,7 @@ def prepare(input_path: str, output_path: str, annotations_document_path: str):
 
                     if paragraph:
                         if comments is not None:
+                            paragraph.subset = Subset.random(train_fraction)
                             for comment in comments:
                                 if (label := comment.body.target) is not None:
                                     if (paragraph_ids := label_to_paragraph_ids.get(comment.body.target)) is None:
@@ -248,6 +258,7 @@ def prepare(input_path: str, output_path: str, annotations_document_path: str):
 
         doc.append_paragraph(f'Количество размеченных документов: {stats.n_documents}')
         doc.append_paragraph(f'Количество размеченных таблиц: {sum(stats.n_tables)}')
+        doc.append_paragraph(f'Количество размеченных параграфов: {sum(stats.n_paragraphs)}')
 
         doc.append_paragraph(f'Среднее количество размеченных таблиц в документе: {stats.n_tables_average:.3f}')
         doc.append_paragraph(f'Среднеквадратичное отклонение количества размеченных таблиц в документе: {stats.n_tables_stdev:.3f}')
@@ -258,7 +269,7 @@ def prepare(input_path: str, output_path: str, annotations_document_path: str):
         doc.append_paragraph(f'Среднее количество символов в параграфе контекста (по всем документам): {stats.paragraph_length_average:.3f}')
         doc.append_paragraph(f'Среднеквадратичное отклонение количества символов в параграфе контекста (по всем документам): {stats.paragraph_length_stdev:.3f}')
 
-        n_stats_elements = 9
+        n_stats_elements = 10
 
         for document, document_stats in stats:
             doc.append_h3(f'Документ {document}')

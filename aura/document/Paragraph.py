@@ -8,6 +8,7 @@ from .ReferentiableObject import ReferentiableObject
 from .Item import Item, INDENT, INCLUDE_XML
 from .Comment import Comment
 
+from ..Subset import Subset
 from ..util.xml import get_text, get_paragraph_style
 from ..util.string import normalize_spaces
 
@@ -15,11 +16,12 @@ from ..util.string import normalize_spaces
 class Paragraph(ReferentiableObject, Item):
     type_label: ClassVar[str] = 'paragraph'
 
-    def __init__(self, xml: etree.Element, text: str, style: str, id_: str = None, comments: tuple[Comment] = None):
+    def __init__(self, xml: etree.Element, text: str, style: str, id_: str = None, comments: tuple[Comment] = None, subset: Subset = None):
         self.xml = xml
         self.text = text
         self.embeddings = {}
         self.comments = comments
+        self.subset = subset
 
         self.style = style
 
@@ -49,7 +51,8 @@ class Paragraph(ReferentiableObject, Item):
             'id': self.id,
             'text': self.text,
             'style': self.style,
-            'embeddings': self.embeddings
+            'embeddings': self.embeddings,
+            'subset': None if self.subset is None else self.subset.value
         }
 
         if INCLUDE_XML:
