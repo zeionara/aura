@@ -46,3 +46,25 @@ def get_comments(docxFileName):
         comment.target = comment_target
 
     return comments, comments_target_xml
+
+
+def get_document_markup(path):
+    with ZipFile(path) as docx_zip:
+        return etree.XML(
+            docx_zip.read('word/document.xml')
+        )
+
+
+def read_elements(path: str):
+    content = get_document_markup(path)
+    elements = list(content.xpath('//w:p|//w:tbl', namespaces = WORD_NAMESPACE))
+
+    for element in list(elements):
+        leaf = element
+
+        while element is not None:
+            if (element := element.getparent()) in elements:
+                elements.remove(leaf)
+                break
+
+    return elements

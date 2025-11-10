@@ -15,3 +15,8 @@ def drop_space_around_punctuation(string: str):
         r'\g<1>',
         PUNCTUATION_WITH_LEADING_SPACE.sub(r'\g<1>', string)
     )
+
+
+def read(path: str):
+    with open(path, 'r', encoding = 'utf-8') as file:
+        return file.read()

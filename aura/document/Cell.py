@@ -112,21 +112,25 @@ class Cell(ReferentiableObject):
     def make_placeholder(self):
         return Placeholder(origin = self)
 
-    def serialize(self):
-        return {
+    def serialize(self, with_embeddings: bool = True):
+        cell = {
             'id': self.id,
             'text': self.text,
             'rows': self.n_rows,
-            'cols': self.n_cols,
-            'embeddings': {}
+            'cols': self.n_cols
         }
 
+        if with_embeddings:
+            cell['embeddings'] = {}
+
+        return cell
+
     @staticmethod
-    def serialize_rows(rows: list[list[Cell]]):
+    def serialize_rows(rows: list[list[Cell]], with_embeddings: bool = True):
         data = {
             'rows': [
                 [
-                    cell.serialize()
+                    cell.serialize(with_embeddings)
                     for cell in row
                 ]
                 for row in rows
