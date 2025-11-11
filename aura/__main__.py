@@ -1,21 +1,21 @@
 from os import walk, path as os_path, mkdir, getenv
 from pathlib import Path
 from queue import Queue
-from json import dump, load, dumps
+from json import dump, load
 from logging import getLogger
 from random import seed as random_seed
 from torch import optim
 
 from click import group, argument, option
 
-from .util import get_comments, get_elements, get_xml, get_text, read_elements, normalize_spaces, read  # , get_paragraph_style
+from .util import get_comments, get_elements, get_xml, get_text, read_elements, normalize_spaces, make_annotation_prompt, make_system_prompt  # , get_paragraph_style
 from .document import Paragraph, Table, Document, INDENT, Cell
 from .embedder import EmbedderType, BaseModel, FlatEmbedder, StructuredEmbedder
 from .evaluation import evaluate as run_evaluation, average
 from .Stats import Stats
 from .Subset import Subset
 from .embedder.AttentionTableEmbedder import DEFAULT_INPUT_DIM
-from .ChatGPTClient import ChatGPTClient
+from .VllmClient import VllmClient
 
 
 RAW_DATA_PATH = 'assets/data/raw'
@@ -40,41 +40,52 @@ def main():
 @main.command()
 @argument('input-path', type = str, default = RAW_DATA_PATH)
 @argument('output-path', type = str, default = ANNOTATED_DATA_PATH)
-def annotate(input_path: str, output_path: str):
-    client = ChatGPTClient(getenv('OPENAI_API_KEY'), read('assets/prompt/system.md'))
+@option('--host', default = 'localhost')
+@option('--port', default = 8080)
+@option('--model', default = 'default')
+def annotate(input_path: str, output_path: str, host: str, port: int, model: str):
+    llm = VllmClient(host, port, model, make_system_prompt())
 
-    client.ask('Кто ты?')
+    if not os_path.isdir(output_path):
+        mkdir(output_path)
 
-    # if not os_path.isdir(output_path):
-    #     mkdir(output_path)
+    tables = []
+    paragraphs = []
 
-    # extracted_elements = []
+    for root, _, files in walk(input_path):
+        for file in files:
+            if not file.endswith('.docx'):
+                continue
 
-    # for root, _, files in walk(input_path):
-    #     for file in files:
-    #         if not file.endswith('.docx'):
-    #             continue
+            elements = read_elements(os_path.join(root, file))
 
-    #         elements = read_elements(os_path.join(root, file))
+            for element in elements:
+                if element.tag.endswith('}p'):
+                    paragraph = Paragraph.from_xml(element)
 
-    #         for element in elements:
-    #             if element.tag.endswith('}p'):
-    #                 paragraph = Paragraph.from_xml(element)
+                    if paragraph:
+                        paragraphs.append({
+                            'id': paragraph.id,
+                            'text': paragraph.text
+                        })
+                else:
+                    table = Table.from_xml(element)
 
-    #                 if paragraph:
-    #                     extracted_elements.append({
-    #                         'id': paragraph.id,
-    #                         'text': paragraph.text
-    #                     })
-    #             else:
-    #                 table = Table.from_xml(element)
+                    tables.append(
+                        Cell.serialize_rows(
+                            table.rows,
+                            with_embeddings = False
+                        )
+                    )
 
-    #                 extracted_elements.append(
-    #                     Cell.serialize_rows(
-    #                         table.rows,
-    #                         with_embeddings = False
-    #                     )
-    #                 )
+    for table in tables:
+        prompt = make_annotation_prompt(
+            table = table
+        )
+
+        completion = llm.complete(prompt)
+
+        print(completion)
 
     # content = dumps(
     #     {
