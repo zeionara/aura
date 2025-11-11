@@ -1,7 +1,7 @@
 from os import path as os_path, mkdir, walk
 from tqdm import tqdm
 
-from logging import getLogger, INFO
+from logging import getLogger
 from time import time
 
 from .VllmClient import VllmClient
@@ -10,7 +10,6 @@ from .document import Paragraph, Cell, Table
 
 
 logger = getLogger(__name__)
-logger.setLevel(INFO)
 
 
 def generate_batches(items: list[int], n: int):
@@ -85,11 +84,13 @@ class Annotator:
                 paragraph_scores = string_to_dict(completion)
 
                 for paragraph in paragraphs_batch:
-                    paragraph['score'] = score = paragraph_scores.get(paragraph['id'])
+                    score = paragraph_scores.get(paragraph['id'])
 
                     if score is None:
                         logger.warning('Paragraph "%s" is missing relevance score', paragraph['text'])
+                    else:
+                        paragraph['score'] = float(score)
 
-            logger.info('Annotated table in {:.3f} seconds', time() - start)
+            logger.warning(f'Annotated table in {time() - start:.3f} seconds')
 
             dict_to_json_file({'paragraphs': paragraphs}, 'assets/scores.json')
