@@ -13,6 +13,14 @@ conda install python-lsp-server click
 pip install lxml transformers torch torchvision torchaudio pandas scikit-learn
 ```
 
+## Automatic annotation
+
+To annotate tables using LLM use the following command:
+
+```sh
+python -m aura annotate assets/data/<version>/source assets/data/<version>/raw --host localhost --port 8080 --model 'default' --batch-size 10
+```
+
 ## Annotation report generation workflow
 
 1. Download annotated `docx` files and put them to folder `$HOME/Document/PhD/$version`

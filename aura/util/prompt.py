@@ -1,7 +1,6 @@
 from os import path as os_path
-from json import dumps
 
-from .string import read
+from .string import read, dict_to_string
 
 
 PROMPTS_PATH = 'assets/prompt'
@@ -24,10 +23,4 @@ def make_annotation_prompt(table: dict):
         )
     )
 
-    return prompt_template.format(
-        table = dumps(
-            table,
-            indent = 2,
-            ensure_ascii = False
-        )
-    )
+    return prompt_template.format(table = dict_to_string(table))

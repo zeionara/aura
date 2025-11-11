@@ -16,6 +16,7 @@ from .Stats import Stats
 from .Subset import Subset
 from .embedder.AttentionTableEmbedder import DEFAULT_INPUT_DIM
 from .VllmClient import VllmClient
+from .Annotator import Annotator
 
 
 RAW_DATA_PATH = 'assets/data/raw'
@@ -32,6 +33,9 @@ DEFAULT_SEED = 17
 logger = getLogger(__name__)
 
 
+
+
+
 @group()
 def main():
     pass
@@ -43,59 +47,68 @@ def main():
 @option('--host', default = 'localhost')
 @option('--port', default = 8080)
 @option('--model', default = 'default')
-def annotate(input_path: str, output_path: str, host: str, port: int, model: str):
-    llm = VllmClient(host, port, model, make_system_prompt())
+@option('--batch-size', '-b', type = int, default = None)
+def annotate(input_path: str, output_path: str, host: str, port: int, model: str, batch_size: int):
+    annotator = Annotator(host, port, model)
 
-    if not os_path.isdir(output_path):
-        mkdir(output_path)
+    annotator.annotate(input_path, output_path, batch_size)
 
-    tables = []
-    paragraphs = []
+    # llm = VllmClient(host, port, model, make_system_prompt())
 
-    for root, _, files in walk(input_path):
-        for file in files:
-            if not file.endswith('.docx'):
-                continue
+    # if not os_path.isdir(output_path):
+    #     mkdir(output_path)
 
-            elements = read_elements(os_path.join(root, file))
+    # tables = []
+    # paragraphs = []
 
-            for element in elements:
-                if element.tag.endswith('}p'):
-                    paragraph = Paragraph.from_xml(element)
+    # for root, _, files in walk(input_path):
+    #     for file in files:
+    #         if not file.endswith('.docx'):
+    #             continue
 
-                    if paragraph:
-                        paragraphs.append({
-                            'id': paragraph.id,
-                            'text': paragraph.text
-                        })
-                else:
-                    table = Table.from_xml(element)
+    #         elements = read_elements(os_path.join(root, file))
 
-                    tables.append(
-                        Cell.serialize_rows(
-                            table.rows,
-                            with_embeddings = False
-                        )
-                    )
+    #         for element in elements:
+    #             if element.tag.endswith('}p'):
+    #                 paragraph = Paragraph.from_xml(element)
 
-    for table in tables:
-        prompt = make_annotation_prompt(
-            table = table
-        )
+    #                 if paragraph:
+    #                     paragraphs.append({
+    #                         'id': paragraph.id,
+    #                         'text': paragraph.text
+    #                     })
+    #             else:
+    #                 table = Table.from_xml(element)
 
-        completion = llm.complete(prompt)
+    #                 tables.append(
+    #                     Cell.serialize_rows(
+    #                         table.rows,
+    #                         with_embeddings = False
+    #                     )
+    #                 )
 
-        print(completion)
+    # # batched_paragraphs = generate_batches(paragraphs, batch_size)
 
-    # content = dumps(
-    #     {
-    #         'elements': extracted_elements,
-    #     },
-    #     indent = 2,
-    #     ensure_ascii = False
-    # )
+    # # print(batched_paragraphs[0])
 
-    # print(content)
+    # for table in tables:
+    #     prompt = make_annotation_prompt(
+    #         table = table
+    #     )
+
+    #     completion = llm.complete(prompt)
+
+    #     print(completion)
+
+    # # content = dumps(
+    # #     {
+    # #         'elements': extracted_elements,
+    # #     },
+    # #     indent = 2,
+    # #     ensure_ascii = False
+    # # )
+
+    # # print(content)
 
 
 @main.command()
