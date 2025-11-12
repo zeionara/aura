@@ -2,12 +2,15 @@ import os
 from zipfile import ZipFile as ZipFileBase
 from lxml import etree
 from datetime import datetime, timezone, timedelta
+from logging import getLogger
 
 from .Document import DOCX_ELEMENT_TEMPLATE_PATH
 from ..util import get_condensed_xml, replace_last_occurrence, WORD_NAMESPACES, get_xml
 
 
 TZ_OFFSET = timezone(timedelta(hours=3), name='MSK')
+
+logger = getLogger(__name__)
 
 
 with open(os.path.join(DOCX_ELEMENT_TEMPLATE_PATH, 'comment.xml'), 'r', encoding = 'utf-8') as file:
@@ -38,21 +41,30 @@ class ZipFile:
 
             self.document = docx_zip.read('word/document.xml').decode('utf-8')
 
-    def insert_comment(self, xml: etree.Element, comment_text: str, comment_id: int = 0, author: str = 'Zeio Nara', date: datetime = None):
+    def insert_comment(self, xml: etree.Element, comment_text: str, comment_id: int = 0, author: str = 'Zeio Nara', date: datetime = None, tag: str = 'r'):
         # 1. Update word/document.xml
 
         condensed_xml = get_condensed_xml(xml)
 
-        if '<w:r>' in condensed_xml:
-            condensed_xml_with_comment = condensed_xml.replace('<w:r>', f'<w:commentRangeStart w:id="{comment_id}"/><w:r>', 1)
+        w_r_index = condensed_xml.find(f'<w:{tag}>')
+        w_r_space_index = condensed_xml.find(f'<w:{tag} ')
+
+        if w_r_index > 0 and w_r_space_index > 0 and w_r_index < w_r_space_index or w_r_space_index < 0:
+            condensed_xml_with_comment = condensed_xml.replace(f'<w:{tag}>', f'<w:commentRangeStart w:id="{comment_id}"/><w:{tag}>', 1)
+        elif w_r_index > 0 and w_r_space_index > 0 and w_r_space_index < w_r_index or w_r_index < 0:
+            condensed_xml_with_comment = condensed_xml.replace(f'<w:{tag} ', f'<w:commentRangeStart w:id="{comment_id}"/><w:{tag} ', 1)
         else:
-            condensed_xml_with_comment = condensed_xml.replace('<w:r ', f'<w:commentRangeStart w:id="{comment_id}"/><w:r ', 1)
+            logger.error('Can\'t insert comment into "%s"', condensed_xml)
+            return
 
         condensed_xml_with_comment = replace_last_occurrence(
             condensed_xml_with_comment,
-            '</w:r>',
-            f'</w:r><w:commentRangeEnd w:id="{comment_id}"/>'
+            f'</w:{tag}>',
+            f'</w:{tag}><w:commentRangeEnd w:id="{comment_id}"/>'
         )
+
+        if self.document.find(condensed_xml) < 0:
+            logger.error('Can\'t find xml in document: "%s"', condensed_xml)
 
         self.document = self.document.replace(condensed_xml, condensed_xml_with_comment)
 

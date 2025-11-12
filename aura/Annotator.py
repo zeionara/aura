@@ -6,7 +6,7 @@ from logging import getLogger
 from time import time
 
 from .VllmClient import VllmClient
-from .util import make_system_prompt, make_annotation_prompt, read_elements, dict_to_string, string_to_dict, dict_to_json_file
+from .util import make_system_prompt, make_annotation_prompt, read_elements, dict_to_string, string_to_dict, dict_to_json_file, get_xml
 from .document import Paragraph, Cell, Table
 from .document.ZipFile import ZipFile
 
@@ -86,6 +86,10 @@ class Annotator:
 
                 for table in tables:
                     llm.reset()
+
+                    file_with_comments.insert_comment(table.xml, table.label, comment_id = comment_id, tag = 'tbl')
+
+                    comment_id += 1
 
                     start = time()
 

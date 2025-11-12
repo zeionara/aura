@@ -58,7 +58,7 @@ def get_xml(root: etree.Element):
 
 def get_condensed_xml(root: etree.Element):
     xml = etree.tostring(root, encoding = str)
-    return normalize_spaces(XMLNS_PROPERTY_PATTERN.sub('', xml))
+    return normalize_spaces(XMLNS_PROPERTY_PATTERN.sub('', xml)).replace(' >', '>')
 
 
 def iterchildren(element: etree.Element):
