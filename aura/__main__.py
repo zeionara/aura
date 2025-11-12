@@ -34,9 +34,6 @@ DEFAULT_SEED = 17
 logger = getLogger(__name__)
 
 
-
-
-
 @group()
 def main():
     pass
@@ -67,6 +64,8 @@ def annotate(input_path: str, output_path: str, host: str, port: int, model: str
             if not file.endswith('.docx'):
                 continue
 
+            file_with_comments = ZipFile(os_path.join(root, file))
+
             elements = read_elements(os_path.join(root, file))
 
             for element in elements:
@@ -89,8 +88,9 @@ def annotate(input_path: str, output_path: str, host: str, port: int, model: str
                         )
                     )
 
-            file = ZipFile(os_path.join(root, file))
-            file.insert_comment(paragraphs[1].xml, 'Foo bar', comment_id = 0)
+            file_with_comments.insert_comment(paragraphs[1].xml, 'Foo bar baz', comment_id = 0)
+
+    file_with_comments.save('assets/test.docx')
 
     # condensed_xml = get_condensed_xml(paragraphs[1].xml)
     # comment_id = 0

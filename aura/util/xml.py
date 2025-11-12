@@ -4,7 +4,35 @@ from lxml import etree
 from .string import normalize_spaces  # , replace_last_occurrence
 
 
-WORD_NAMESPACE = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+WORD_NAMESPACE = {
+    'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+}
+WORD_NAMESPACES = {
+    'mc': "http://schemas.openxmlformats.org/markup-compatibility/2006",
+    'o': "urn:schemas-microsoft-com:office:office",
+    'r': "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    'm': "http://schemas.openxmlformats.org/officeDocument/2006/math",
+    'v': "urn:schemas-microsoft-com:vml",
+    'wp': "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+    'w10': "urn:schemas-microsoft-com:office:word",
+    'w': "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+    'wne': "http://schemas.microsoft.com/office/word/2006/wordml",
+    'sl': "http://schemas.openxmlformats.org/schemaLibrary/2006/main",
+    'a': "http://schemas.openxmlformats.org/drawingml/2006/main",
+    'pic': "http://schemas.openxmlformats.org/drawingml/2006/picture",
+    'c': "http://schemas.openxmlformats.org/drawingml/2006/chart",
+    'lc': "http://schemas.openxmlformats.org/drawingml/2006/lockedCanvas",
+    'dgm': "http://schemas.openxmlformats.org/drawingml/2006/diagram",
+    'wps': "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
+    'wpg': "http://schemas.microsoft.com/office/word/2010/wordprocessingGroup",
+    'w14': "http://schemas.microsoft.com/office/word/2010/wordml",
+    'w15': "http://schemas.microsoft.com/office/word/2012/wordml",
+    'w16': "http://schemas.microsoft.com/office/word/2018/wordml",
+    'w16cex': "http://schemas.microsoft.com/office/word/2018/wordml/cex",
+    'w16cid': "http://schemas.microsoft.com/office/word/2016/wordml/cid",
+    'cr': "http://schemas.microsoft.com/office/comments/2020/reactions",
+    None: "http://schemas.microsoft.com/office/tasks/2019/documenttasks"
+}
 XMLNS_PROPERTY_PATTERN = re.compile(r'xmlns:[a-z0-9]+="[^" ]+"')
 
 
