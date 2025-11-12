@@ -8,7 +8,7 @@ from torch import optim
 
 from click import group, argument, option
 
-from .util import get_comments, get_elements, get_xml, get_text, read_elements, normalize_spaces, make_annotation_prompt, make_system_prompt  # , get_paragraph_style
+from .util import get_comments, get_elements, get_xml, get_text, read_elements, normalize_spaces, make_annotation_prompt, make_system_prompt, dict_from_json_file  # , get_paragraph_style
 from .document import Paragraph, Table, Document, INDENT, Cell, ZipFile
 from .document.ZipFile import ZipFile
 from .embedder import EmbedderType, BaseModel, FlatEmbedder, StructuredEmbedder
@@ -87,8 +87,15 @@ def annotate(input_path: str, output_path: str, host: str, port: int, model: str
                             with_embeddings = False
                         )
                     )
+    annotations = dict_from_json_file('assets/scores.json')['paragraphs']
 
-            file_with_comments.insert_comment(paragraphs[1].xml, 'Foo bar baz', comment_id = 0)
+    comment_id = 0
+
+    for paragraph, annotation in zip(paragraphs, annotations):
+        if (score := annotation['score']) > 0.5:
+            file_with_comments.insert_comment(paragraph.xml, f'table {score:.3f}', comment_id = comment_id)
+            print(annotation['text'])
+            comment_id += 1
 
     file_with_comments.save('assets/test.docx')
 

@@ -43,8 +43,13 @@ class ZipFile:
 
         condensed_xml = get_condensed_xml(xml)
 
+        if '<w:r>' in condensed_xml:
+            condensed_xml_with_comment = condensed_xml.replace('<w:r>', f'<w:commentRangeStart w:id="{comment_id}"/><w:r>', 1)
+        else:
+            condensed_xml_with_comment = condensed_xml.replace('<w:r ', f'<w:commentRangeStart w:id="{comment_id}"/><w:r ', 1)
+
         condensed_xml_with_comment = replace_last_occurrence(
-            condensed_xml.replace('<w:r ', f'<w:commentRangeStart w:id="{comment_id}"/><w:r ', 1),
+            condensed_xml_with_comment,
             '</w:r>',
             f'</w:r><w:commentRangeEnd w:id="{comment_id}"/>'
         )
@@ -71,13 +76,7 @@ class ZipFile:
 
         comments.append(comment)
 
-        self.comments = etree.tostring(
-            comments,
-            pretty_print=True,
-            encoding='utf-8',
-            xml_declaration = True,
-            standalone = True
-        ).decode('utf-8')
+        self.comments = comments
 
     def save(self, path=None):
         if path is None:
@@ -99,7 +98,7 @@ class ZipFile:
                     elif item.filename == 'word/comments.xml':
                         # Replace with updated comments if they exist
                         if self.comments is not None:
-                            target_zip.writestr(item, self.comments)
+                            target_zip.writestr(item, dumps(self.comments))
                     elif item.filename == '[Content_Types].xml' and init_comments:
                         content_types = etree.XML(source_zip.read(item))
 
@@ -118,22 +117,11 @@ class ZipFile:
                         )
 
                         target_zip.writestr(item, dumps(rels))
-
-                        # target_zip.writestr(item, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId8" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable" Target="fontTable.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/><Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/><Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2007/relationships/stylesWithEffects" Target="stylesWithEffects.xml"/><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/webSettings" Target="webSettings.xml"/><Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/><Relationship Id="rId10" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/></Relationships>')
-                    # elif item.filename == '_rels/.rels':
-                    #     target_zip.writestr('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/></Relationships>')
                     else:
                         # Copy all other files as-is
                         target_zip.writestr(item, source_zip.read(item.filename))
 
-                    # if item.filename == '_rels/document.xml.rels':
-                    #     found_document_rels = True
-
-                # if not found_document_rels:
-                #     target_zip.writestr('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/></Relationships>')
-
-                # If comments.xml didn't exist in original but we created it, add it now
                 if init_comments:
-                    target_zip.writestr('word/comments.xml', self.comments)
+                    target_zip.writestr('word/comments.xml', dumps(self.comments))
 
         os.replace(temp_path, path)
