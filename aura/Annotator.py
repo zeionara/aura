@@ -1,3 +1,4 @@
+import re
 from os import path as os_path, mkdir, walk
 from tqdm import tqdm
 
@@ -7,9 +8,13 @@ from time import time
 from .VllmClient import VllmClient
 from .util import make_system_prompt, make_annotation_prompt, read_elements, dict_to_string, string_to_dict, dict_to_json_file
 from .document import Paragraph, Cell, Table
+from .document.ZipFile import ZipFile
 
 
 logger = getLogger(__name__)
+
+
+TABLE_TITLE_PATTERN = re.compile(r'таблица\s+([^ ]+)\s+.*')
 
 
 def generate_batches(items: list[int], n: int):
@@ -22,75 +27,102 @@ class Annotator:
     def __init__(self, host: str, port: int, model: str):
         self.llm = VllmClient(host, port, model, make_system_prompt())
 
-    def annotate(self, input_path: str, output_path: str, batch_size: int = None):
-
+    def annotate(self, input_path: str, output_path: str, batch_size: int = None, n_batches: int = None, table_label_search_window: int = 5, score_threshold: float = 0.5):
         if not os_path.isdir(output_path):
             mkdir(output_path)
 
-        tables = []
-        paragraphs = []
+        llm = self.llm
 
         for root, _, files in walk(input_path):
             for file in files:
                 if not file.endswith('.docx'):
                     continue
 
+                comment_id = 0
+
+                tables = []
+                paragraphs = []
+
+                table_label_cahdidates = []
+
                 elements = read_elements(os_path.join(root, file))
+                file_with_comments = ZipFile(os_path.join(root, file))
 
                 for element in elements:
                     if element.tag.endswith('}p'):
                         paragraph = Paragraph.from_xml(element)
 
                         if paragraph:
-                            paragraphs.append({
-                                'id': paragraph.id,
-                                'text': paragraph.text
-                            })
+                            paragraphs.append(paragraph)
+                            table_label_cahdidates.append(paragraph.text)
+                            # paragraphs.append({
+                            #     'id': paragraph.id,
+                            #     'text': paragraph.text
+                            # })
                     else:
-                        table = Table.from_xml(element)
+                        i = 0
+                        label = 'undefined'
 
-                        tables.append(
-                            Cell.serialize_rows(
-                                table.rows,
-                                with_embeddings = False
-                            )
+                        while i < table_label_search_window:
+                            title = table_label_cahdidates.pop().lower()
+                            i += 1
+
+                            match = TABLE_TITLE_PATTERN.match(title)
+
+                            if match is not None:
+                                label = match.group(1)
+                                break
+
+                        table_label_search_window = []
+
+                        table = Table.from_xml(element, label = label)
+
+                        tables.append(table)
+
+                batched_paragraphs = generate_batches(paragraphs, batch_size)
+
+                if n_batches is not None:
+                    batched_paragraphs = batched_paragraphs[:n_batches]
+
+                for table in tables:
+                    llm.reset()
+
+                    start = time()
+
+                    prompt = make_annotation_prompt(
+                        table = Cell.serialize_rows(
+                            table.rows,
+                            with_embeddings = False
+                        )
+                    )
+
+                    completion = llm.complete(prompt)
+
+                    for paragraphs_batch in tqdm(batched_paragraphs):
+                        completion = llm.complete(
+                            dict_to_string(
+                                [
+                                    {
+                                        'id': paragraph.id,
+                                        'text': paragraph.text
+                                    }
+                                    for paragraph in paragraphs_batch
+                                ]
+                            ),
+                            add_to_history = False
                         )
 
-        llm = self.llm
+                        paragraph_scores = string_to_dict(completion)
 
-        batched_paragraphs = generate_batches(paragraphs, batch_size)
+                        for paragraph in paragraphs_batch:
+                            score = paragraph_scores.get(paragraph.id)
 
-        # print(batched_paragraphs[0])
+                            if score is None:
+                                logger.warning('Paragraph "%s" is missing relevance score', paragraph['text'])
+                            elif score > score_threshold:
+                                file_with_comments.insert_comment(paragraph.xml, f'{table.label} {score:.3f}', comment_id = comment_id)
+                                comment_id += 1
 
-        for table in tables:
-            llm.reset()
+                    logger.warning(f'Annotated table in {time() - start:.3f} seconds')
 
-            start = time()
-
-            prompt = make_annotation_prompt(
-                table = table
-            )
-
-            completion = llm.complete(prompt)
-
-            for paragraphs_batch in tqdm(batched_paragraphs):
-                completion = llm.complete(
-                    dict_to_string(
-                        paragraphs_batch
-                    ),
-                    add_to_history = False
-                )
-
-                paragraph_scores = string_to_dict(completion)
-
-                for paragraph in paragraphs_batch:
-                    score = paragraph_scores.get(paragraph['id'])
-
-                    if score is None:
-                        logger.warning('Paragraph "%s" is missing relevance score', paragraph['text'])
-                    else:
-                        paragraph['score'] = float(score)
-
-            logger.warning(f'Annotated table in {time() - start:.3f} seconds')
-
-            dict_to_json_file({'paragraphs': paragraphs}, 'assets/scores.json')
+                file_with_comments.save('assets/test-live.docx')

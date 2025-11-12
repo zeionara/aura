@@ -46,10 +46,14 @@ def main():
 @option('--port', default = 8080)
 @option('--model', default = 'default')
 @option('--batch-size', '-b', type = int, default = None)
-def annotate(input_path: str, output_path: str, host: str, port: int, model: str, batch_size: int):
-    # annotator = Annotator(host, port, model)
+@option('--n-batches', '-n', type = int, default = None)
+@option('--score-threshold', '-t', type = float, default = 0.5)
+def annotate(input_path: str, output_path: str, host: str, port: int, model: str, batch_size: int, n_batches: int, score_threshold: float):
+    annotator = Annotator(host, port, model)
 
-    # annotator.annotate(input_path, output_path, batch_size)
+    annotator.annotate(input_path, output_path, batch_size, n_batches, score_threshold = score_threshold)
+
+    return
 
     # llm = VllmClient(host, port, model, make_system_prompt())
 
