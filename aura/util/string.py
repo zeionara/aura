@@ -52,3 +52,12 @@ def drop_space_around_punctuation(string: str):
 def read(path: str):
     with open(path, 'r', encoding = 'utf-8') as file:
         return file.read()
+
+
+def replace_last_occurrence(main_string, old_substring, new_substring):
+    index = main_string.rfind(old_substring)
+
+    if index != -1:
+        return main_string[:index] + new_substring + main_string[index + len(old_substring):]
+
+    return main_string

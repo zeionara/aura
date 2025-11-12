@@ -9,7 +9,8 @@ from torch import optim
 from click import group, argument, option
 
 from .util import get_comments, get_elements, get_xml, get_text, read_elements, normalize_spaces, make_annotation_prompt, make_system_prompt  # , get_paragraph_style
-from .document import Paragraph, Table, Document, INDENT, Cell
+from .document import Paragraph, Table, Document, INDENT, Cell, ZipFile
+from .document.ZipFile import ZipFile
 from .embedder import EmbedderType, BaseModel, FlatEmbedder, StructuredEmbedder
 from .evaluation import evaluate as run_evaluation, average
 from .Stats import Stats
@@ -49,43 +50,58 @@ def main():
 @option('--model', default = 'default')
 @option('--batch-size', '-b', type = int, default = None)
 def annotate(input_path: str, output_path: str, host: str, port: int, model: str, batch_size: int):
-    annotator = Annotator(host, port, model)
+    # annotator = Annotator(host, port, model)
 
-    annotator.annotate(input_path, output_path, batch_size)
+    # annotator.annotate(input_path, output_path, batch_size)
 
     # llm = VllmClient(host, port, model, make_system_prompt())
 
-    # if not os_path.isdir(output_path):
-    #     mkdir(output_path)
+    if not os_path.isdir(output_path):
+        mkdir(output_path)
 
-    # tables = []
-    # paragraphs = []
+    tables = []
+    paragraphs = []
 
-    # for root, _, files in walk(input_path):
-    #     for file in files:
-    #         if not file.endswith('.docx'):
-    #             continue
+    for root, _, files in walk(input_path):
+        for file in files:
+            if not file.endswith('.docx'):
+                continue
 
-    #         elements = read_elements(os_path.join(root, file))
+            elements = read_elements(os_path.join(root, file))
 
-    #         for element in elements:
-    #             if element.tag.endswith('}p'):
-    #                 paragraph = Paragraph.from_xml(element)
+            for element in elements:
+                if element.tag.endswith('}p'):
+                    paragraph = Paragraph.from_xml(element)
 
-    #                 if paragraph:
-    #                     paragraphs.append({
-    #                         'id': paragraph.id,
-    #                         'text': paragraph.text
-    #                     })
-    #             else:
-    #                 table = Table.from_xml(element)
+                    if paragraph:
+                        # paragraphs.append({
+                        #     'id': paragraph.id,
+                        #     'text': paragraph.text
+                        # })
+                        paragraphs.append(paragraph)
+                else:
+                    table = Table.from_xml(element)
 
-    #                 tables.append(
-    #                     Cell.serialize_rows(
-    #                         table.rows,
-    #                         with_embeddings = False
-    #                     )
-    #                 )
+                    tables.append(
+                        Cell.serialize_rows(
+                            table.rows,
+                            with_embeddings = False
+                        )
+                    )
+
+            file = ZipFile(os_path.join(root, file))
+            file.insert_comment(paragraphs[1].xml, 'Foo bar', comment_id = 0)
+
+    # condensed_xml = get_condensed_xml(paragraphs[1].xml)
+    # comment_id = 0
+
+    # condensed_xml_with_comment = replace_last_occurrence(
+    #     condensed_xml.replace('<w:r ', f'<w:commentRangeStart w:id="{comment_id}"/><w:r ', 1),
+    #     '</w:r>',
+    #     f'</w:r><w:commentRangeEnd w:id="{comment_id}"/>'
+    # )
+
+    # print(condensed_xml_with_comment)
 
     # # batched_paragraphs = generate_batches(paragraphs, batch_size)
 

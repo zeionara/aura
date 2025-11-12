@@ -1,7 +1,23 @@
+import re
 from lxml import etree
+
+from .string import normalize_spaces  # , replace_last_occurrence
 
 
 WORD_NAMESPACE = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+XMLNS_PROPERTY_PATTERN = re.compile(r'xmlns:[a-z0-9]+="[^" ]+"')
+
+
+# def insert_comment(xml: etree.Element, comment_text: str, comment_id: int = 0):
+#     condensed_xml = get_condensed_xml(xml)
+#
+#     condensed_xml_with_comment = replace_last_occurrence(
+#         condensed_xml.replace('<w:r ', f'<w:commentRangeStart w:id="{comment_id}"/><w:r ', 1),
+#         '</w:r>',
+#         f'</w:r><w:commentRangeEnd w:id="{comment_id}"/>'
+#     )
+#
+#     print(condensed_xml_with_comment)
 
 
 def get_text(root: etree.Element):
@@ -10,6 +26,11 @@ def get_text(root: etree.Element):
 
 def get_xml(root: etree.Element):
     return etree.tostring(root, encoding = str)
+
+
+def get_condensed_xml(root: etree.Element):
+    xml = etree.tostring(root, encoding = str)
+    return normalize_spaces(XMLNS_PROPERTY_PATTERN.sub('', xml))
 
 
 def iterchildren(element: etree.Element):
