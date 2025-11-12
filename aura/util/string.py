@@ -4,6 +4,7 @@ from json.decoder import JSONDecodeError
 
 
 SPACE = re.compile(r'\s+')
+SPACE_CHAR = re.compile(r' +')
 
 PUNCTUATION_WITH_LEADING_SPACE = re.compile(r'\s+([.,;])')
 PUNCTUATION_WITH_TRAILING_SPACE = re.compile(r'([\[])\s+')
@@ -40,6 +41,10 @@ def string_to_dict(data: str):
 
 def normalize_spaces(string: str):
     return SPACE.sub(' ', string).strip()
+
+
+def reduce_spaces(string: str):
+    return SPACE_CHAR.sub(' ', string).strip()
 
 
 def drop_space_around_punctuation(string: str):

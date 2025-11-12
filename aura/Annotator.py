@@ -119,13 +119,21 @@ class Annotator:
                         paragraph_scores = string_to_dict(completion)
 
                         for paragraph in paragraphs_batch:
-                            score = paragraph_scores.get(paragraph.id)
+                            result = paragraph_scores.get(paragraph.id)
 
-                            if score is None:
+                            if result is None:
                                 logger.warning('Paragraph "%s" is missing relevance score', paragraph['text'])
-                            elif score > score_threshold:
-                                file_with_comments.insert_comment(paragraph.xml, f'{table.label} {score:.3f}', comment_id = comment_id)
-                                comment_id += 1
+                            else:
+                                score = result.get('score')
+                                comment = result.get('comment')
+
+                                if score > score_threshold:
+                                    file_with_comments.insert_comment(
+                                        paragraph.xml,
+                                        f'{table.label} {score:.3f}' if comment is None else f'{table.label} {score:.3f} {comment}',
+                                        comment_id = comment_id
+                                    )
+                                    comment_id += 1
 
                     logger.warning(f'Annotated table in {time() - start:.3f} seconds')
 

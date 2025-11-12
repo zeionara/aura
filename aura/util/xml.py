@@ -1,7 +1,7 @@
 import re
 from lxml import etree
 
-from .string import normalize_spaces  # , replace_last_occurrence
+from .string import normalize_spaces, reduce_spaces  # , replace_last_occurrence
 
 
 WORD_NAMESPACE = {
@@ -58,7 +58,7 @@ def get_xml(root: etree.Element):
 
 def get_condensed_xml(root: etree.Element):
     xml = etree.tostring(root, encoding = str)
-    return normalize_spaces(XMLNS_PROPERTY_PATTERN.sub('', xml)).replace(' >', '>')
+    return reduce_spaces(XMLNS_PROPERTY_PATTERN.sub('', xml)).replace(' >', '>')
 
 
 def iterchildren(element: etree.Element):
