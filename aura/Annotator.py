@@ -6,7 +6,7 @@ from logging import getLogger
 from time import time
 
 from .VllmClient import VllmClient
-from .util import make_system_prompt, make_annotation_prompt, read_elements, dict_to_string, string_to_dict, dict_to_json_file, get_xml
+from .util import make_system_prompt, make_annotation_prompt, read_elements, dict_to_string, string_to_dict, dict_to_json_file, get_xml, dict_to_json_file
 from .document import Paragraph, Cell, Table
 from .document.ZipFile import ZipFile
 
@@ -27,7 +27,7 @@ class Annotator:
     def __init__(self, host: str, port: int, model: str):
         self.llm = VllmClient(host, port, model, make_system_prompt())
 
-    def annotate(self, input_path: str, output_path: str, batch_size: int = None, n_batches: int = None, table_label_search_window: int = 5, score_threshold: float = 0.5):
+    def annotate(self, input_path: str, output_path: str, batch_size: int = None, n_batches: int = None, table_label_search_window: int = 5, n_iterations: int = 1):
         if not os_path.isdir(output_path):
             mkdir(output_path)
 
@@ -43,10 +43,14 @@ class Annotator:
                 tables = []
                 paragraphs = []
 
+                annotations = {}
+                offset = 0
+
                 table_label_cahdidates = []
 
                 elements = read_elements(os_path.join(root, file))
-                file_with_comments = ZipFile(os_path.join(root, file))
+                # file_with_comments = ZipFile(os_path.join(root, file))
+                output_file = file[:-5] + '.json'
 
                 for element in elements:
                     if element.tag.endswith('}p'):
@@ -61,7 +65,7 @@ class Annotator:
                             # })
                     else:
                         i = 0
-                        label = 'undefined'
+                        label = None
 
                         while i < table_label_search_window:
                             title = table_label_cahdidates.pop().lower()
@@ -72,6 +76,14 @@ class Annotator:
                             if match is not None:
                                 label = match.group(1)
                                 break
+
+                        if label is None:
+                            logger.error('Couldn\'t find table label')
+                        else:
+                            annotations[label] = {
+                                'type': 'table',
+                                'paragraphs': []
+                            }
 
                         table_label_search_window = []
 
@@ -87,7 +99,10 @@ class Annotator:
                 for table in tables:
                     llm.reset()
 
-                    file_with_comments.insert_comment(table.xml, table.label, comment_id = comment_id, tag = 'tbl')
+                    if table.label is None or table.label not in annotations:
+                        continue
+
+                    # file_with_comments.insert_comment(table.xml, table.label, comment_id = comment_id, tag = 'tbl')
 
                     comment_id += 1
 
@@ -102,39 +117,66 @@ class Annotator:
 
                     completion = llm.complete(prompt)
 
-                    for paragraphs_batch in tqdm(batched_paragraphs):
-                        completion = llm.complete(
-                            dict_to_string(
-                                [
-                                    {
-                                        'id': paragraph.id,
-                                        'text': paragraph.text
-                                    }
-                                    for paragraph in paragraphs_batch
-                                ]
-                            ),
-                            add_to_history = False
-                        )
+                    pbar = tqdm(batched_paragraphs, desc = f'Annotating table {table.label}')
 
-                        paragraph_scores = string_to_dict(completion)
+                    for paragraphs_batch in pbar:
+                        iteration = 0
 
-                        for paragraph in paragraphs_batch:
-                            result = paragraph_scores.get(paragraph.id)
+                        while iteration < n_iterations:
+                            completion = llm.complete(
+                                dict_to_string(
+                                    [
+                                        {
+                                            'id': paragraph.id,
+                                            'text': paragraph.text
+                                        }
+                                        for paragraph in paragraphs_batch
+                                    ]
+                                ),
+                                add_to_history = False
+                            )
 
-                            if result is None:
-                                logger.warning('Paragraph "%s" is missing relevance score', paragraph['text'])
-                            else:
-                                score = result.get('score')
-                                comment = result.get('comment')
+                            paragraph_scores = string_to_dict(completion)
 
-                                if score > score_threshold:
-                                    file_with_comments.insert_comment(
-                                        paragraph.xml,
-                                        f'{table.label} {score:.3f}' if comment is None else f'{table.label} {score:.3f} {comment}',
-                                        comment_id = comment_id
-                                    )
-                                    comment_id += 1
+                            for i, paragraph in enumerate(paragraphs_batch):
+                                result = paragraph_scores.get(paragraph.id)
 
-                    logger.warning(f'Annotated table in {time() - start:.3f} seconds')
+                                if result is None:
+                                    logger.warning('Paragraph "%s" is missing relevance score', paragraph['text'])
+                                else:
+                                    # score = result.get('score')
+                                    # comment = result.get('comment')
 
-                file_with_comments.save('assets/test-live.docx')
+                                    if iteration == 0:
+                                        annotations[table.label]['paragraphs'].append(
+                                            {
+                                                'id': paragraph.id,
+                                                'text': paragraph.text,
+                                                'scores': {
+                                                    f'annotator {iteration}': result
+                                                }
+                                            }
+                                        )
+                                    else:
+                                        annotations[table.label]['paragraphs'][offset + i]['scores'][f'annotator {iteration}'] = result
+
+                                    # if score > score_threshold:
+                                    #     file_with_comments.insert_comment(
+                                    #         paragraph.xml,
+                                    #         f'{table.label} {score:.3f}' if comment is None else f'{table.label} {score:.3f} {comment}',
+                                    #         comment_id = comment_id
+                                    #     )
+                                    #     comment_id += 1
+
+                            iteration += 1
+
+                        offset += len(batched_paragraphs)
+
+                    logger.warning(f'Annotation completed in in {time() - start:.3f} seconds')
+
+                dict_to_json_file(
+                    annotations,
+                    os_path.join(root, output_file)
+                )
+
+                # file_with_comments.save('assets/test-live.docx')

@@ -47,11 +47,11 @@ def main():
 @option('--model', default = 'default')
 @option('--batch-size', '-b', type = int, default = None)
 @option('--n-batches', '-n', type = int, default = None)
-@option('--score-threshold', '-t', type = float, default = 0.5)
-def annotate(input_path: str, output_path: str, host: str, port: int, model: str, batch_size: int, n_batches: int, score_threshold: float):
+@option('--n-iterations', '-i', type = float, default = 1)
+def annotate(input_path: str, output_path: str, host: str, port: int, model: str, batch_size: int, n_batches: int, n_iterations: int):
     annotator = Annotator(host, port, model)
 
-    annotator.annotate(input_path, output_path, batch_size, n_batches, score_threshold = score_threshold)
+    annotator.annotate(input_path, output_path, batch_size, n_batches, n_iterations = n_iterations)
 
     return
 
