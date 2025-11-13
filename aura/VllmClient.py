@@ -5,11 +5,12 @@ TIMEOUT = 3600
 
 
 class VllmClient:
-    def __init__(self, host: str, port: int, model: str, system_prompt: str):
+    def __init__(self, host: str, port: int, model: str, system_prompt: str, label: str):
         self.host = host
         self.port = port
         self.model = model
         self.system_prompt = system_prompt
+        self.label = label
 
         self.history = []
 

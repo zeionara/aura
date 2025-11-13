@@ -15,10 +15,16 @@ pip install lxml transformers torch torchvision torchaudio pandas scikit-learn
 
 ## Automatic annotation
 
-To annotate tables using LLM use the following command:
+To annotate tables using LLM, first, generate the annotations:
 
 ```sh
-python -m aura annotate assets/data/<version>/source assets/data/<version>/raw --host localhost --port 8080 --model 'default' --batch-size 10
+python -m aura annotate assets/data/<version>/source assets/data/<version>/annotations --host localhost --port 8080 --model 'default' --batch-size 10
+```
+
+Then apply these annotations:
+
+```sh
+python -m aura apply assets/data/<version>/source assets/data/<version>/annotations assets/data/<version>/raw --threshold 0.5
 ```
 
 ## Annotation report generation workflow

@@ -24,14 +24,14 @@ def generate_batches(items: list[int], n: int):
 
 
 class Annotator:
-    def __init__(self, host: str, port: int, model: str):
-        self.llm = VllmClient(host, port, model, make_system_prompt())
+    def __init__(self, llms: list[VllmClient]):
+        self.llms = llms
 
-    def annotate(self, input_path: str, output_path: str, batch_size: int = None, n_batches: int = None, table_label_search_window: int = 5, n_iterations: int = 1):
+    def annotate(self, input_path: str, output_path: str, batch_size: int = None, n_batches: int = None, table_label_search_window: int = 5):
         if not os_path.isdir(output_path):
             mkdir(output_path)
 
-        llm = self.llm
+        llms = self.llms
 
         for root, _, files in walk(input_path):
             for file in files:
@@ -97,14 +97,15 @@ class Annotator:
                     batched_paragraphs = batched_paragraphs[:n_batches]
 
                 for table in tables:
-                    llm.reset()
+                    for llm in llms:
+                        llm.reset()
 
                     if table.label is None or table.label not in annotations:
                         continue
 
                     # file_with_comments.insert_comment(table.xml, table.label, comment_id = comment_id, tag = 'tbl')
 
-                    comment_id += 1
+                    # comment_id += 1
 
                     start = time()
 
@@ -115,14 +116,15 @@ class Annotator:
                         )
                     )
 
-                    completion = llm.complete(prompt)
+                    for llm in llms:
+                        completion = llm.complete(prompt)
 
                     pbar = tqdm(batched_paragraphs, desc = f'Annotating table {table.label}')
 
                     for paragraphs_batch in pbar:
                         iteration = 0
 
-                        while iteration < n_iterations:
+                        while iteration < len(llms):
                             completion = llm.complete(
                                 dict_to_string(
                                     [
@@ -153,12 +155,12 @@ class Annotator:
                                                 'id': paragraph.id,
                                                 'text': paragraph.text,
                                                 'scores': {
-                                                    f'annotator {iteration}': result
+                                                    llms[iteration].label: result
                                                 }
                                             }
                                         )
                                     else:
-                                        annotations[table.label]['paragraphs'][offset + i]['scores'][f'annotator {iteration}'] = result
+                                        annotations[table.label]['paragraphs'][offset + i]['scores'][llms[iteration].label] = result
 
                                     # if score > score_threshold:
                                     #     file_with_comments.insert_comment(
@@ -176,7 +178,7 @@ class Annotator:
 
                 dict_to_json_file(
                     annotations,
-                    os_path.join(root, output_file)
+                    os_path.join(output_path, output_file)
                 )
 
                 # file_with_comments.save('assets/test-live.docx')

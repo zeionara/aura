@@ -17,11 +17,12 @@ from .Stats import Stats
 from .Subset import Subset
 from .embedder.AttentionTableEmbedder import DEFAULT_INPUT_DIM
 from .VllmClient import VllmClient
-from .Annotator import Annotator
+from .Annotator import Annotator, TABLE_TITLE_PATTERN
 
 
 RAW_DATA_PATH = 'assets/data/raw'
-ANNOTATED_DATA_PATH = 'assets/data/annotations'
+SOURCE_DATA_PATH = 'assets/data/source'
+ANNOTATIONS_PATH = 'assets/data/annotations'
 PREPARED_DATA_PATH = 'assets/data/prepared'
 REPORT_PATH = 'assets/data/report.tsv'
 ANNOTATIONS_DOCUMENT_PATH = 'assets/data/annotations.docx'
@@ -39,103 +40,118 @@ def main():
     pass
 
 
+def aggregate(**annotations: dict):
+    scores = []
+    comment = None
+
+    for annotation in annotations.values():
+        scores.append(annotation['score'])
+
+        if comment is None or len(annotation['comment']) > len(comment):
+            comment = annotation['comment']
+
+    return sum(scores) / len(scores), comment
+
+
 @main.command()
-@argument('input-path', type = str, default = RAW_DATA_PATH)
-@argument('output-path', type = str, default = ANNOTATED_DATA_PATH)
-@option('--host', default = 'localhost')
-@option('--port', default = 8080)
-@option('--model', default = 'default')
-@option('--batch-size', '-b', type = int, default = None)
-@option('--n-batches', '-n', type = int, default = None)
-@option('--n-iterations', '-i', type = float, default = 1)
-def annotate(input_path: str, output_path: str, host: str, port: int, model: str, batch_size: int, n_batches: int, n_iterations: int):
-    annotator = Annotator(host, port, model)
-
-    annotator.annotate(input_path, output_path, batch_size, n_batches, n_iterations = n_iterations)
-
-    return
-
-    # llm = VllmClient(host, port, model, make_system_prompt())
-
+@argument('input-path', type = str, default = SOURCE_DATA_PATH)
+@argument('annotations-path', type = str, default = ANNOTATIONS_PATH)
+@argument('output-path', type = str, default = RAW_DATA_PATH)
+@option('--threshold', type = float, default = 0.5)
+@option('--table-label-search-window', type = int, default = 5)
+def apply(input_path: str, annotations_path: str, output_path: str, threshold: float, table_label_search_window: int):
     if not os_path.isdir(output_path):
         mkdir(output_path)
-
-    tables = []
-    paragraphs = []
 
     for root, _, files in walk(input_path):
         for file in files:
             if not file.endswith('.docx'):
                 continue
 
-            file_with_comments = ZipFile(os_path.join(root, file))
+            annotations_file = file[:-5] + '.json'
+            output_file = ZipFile(os_path.join(root, file))
+
+            annotations = dict_from_json_file(
+                os_path.join(annotations_path, annotations_file)
+            )
 
             elements = read_elements(os_path.join(root, file))
+
+            comment_id = 0
+
+            tables = []
+            paragraphs = []
+
+            table_label_cahdidates = []
 
             for element in elements:
                 if element.tag.endswith('}p'):
                     paragraph = Paragraph.from_xml(element)
 
                     if paragraph:
-                        # paragraphs.append({
-                        #     'id': paragraph.id,
-                        #     'text': paragraph.text
-                        # })
                         paragraphs.append(paragraph)
+                        table_label_cahdidates.append(paragraph.text)
                 else:
-                    table = Table.from_xml(element)
+                    i = 0
+                    label = None
 
-                    tables.append(
-                        Cell.serialize_rows(
-                            table.rows,
-                            with_embeddings = False
+                    while i < table_label_search_window:
+                        title = table_label_cahdidates.pop().lower()
+                        i += 1
+
+                        match = TABLE_TITLE_PATTERN.match(title)
+
+                        if match is not None:
+                            label = match.group(1)
+                            break
+
+                    if label is None:
+                        logger.error('Couldn\'t find table label')
+
+                    table_label_search_window = []
+
+                    table = Table.from_xml(element, label = label)
+
+                    tables.append(table)
+
+            for table in tables:
+                output_file.insert_comment(table.xml, table.label, comment_id = comment_id, tag = 'tbl')
+                comment_id += 1
+
+                if (n_paragraph_annotations := len(paragraph_annotations := annotations[table.label]['paragraphs'])) != (n_paragraphs := len(paragraphs)):
+                    logger.warning(f'Paragraph annotations count does not match the number of paragraphs ({n_paragraph_annotations} != {n_paragraphs})')
+
+                for paragraph_annotation, paragraph in zip(paragraph_annotations, paragraphs):
+                    score, comment = aggregate(**paragraph_annotation['scores'])
+
+                    if score > threshold:
+                        output_file.insert_comment(
+                            paragraph.xml,
+                            f'{table.label} {score:.3f}' if comment is None else f'{table.label} {score:.3f} {comment}',
+                            comment_id = comment_id
                         )
-                    )
-    annotations = dict_from_json_file('assets/scores.json')['paragraphs']
+                        comment_id += 1
 
-    comment_id = 0
+            output_file.save(os_path.join(output_path, file))
 
-    for paragraph, annotation in zip(paragraphs, annotations):
-        if (score := annotation['score']) > 0.5:
-            file_with_comments.insert_comment(paragraph.xml, f'table {score:.3f}', comment_id = comment_id)
-            print(annotation['text'])
-            comment_id += 1
 
-    file_with_comments.save('assets/test.docx')
+@main.command()
+@argument('input-path', type = str, default = RAW_DATA_PATH)
+@argument('output-path', type = str, default = ANNOTATIONS_PATH)
+@option('--host', default = 'localhost')
+@option('--port', default = 8080)
+@option('--model', default = 'default')
+@option('--batch-size', '-b', type = int, default = None)
+@option('--n-batches', '-n', type = int, default = None)
+def annotate(input_path: str, output_path: str, host: str, port: int, model: str, batch_size: int, n_batches: int):
+    annotator = Annotator(
+        llms = [
+            VllmClient(host, port, model, make_system_prompt(), label = 'local foo'),
+            VllmClient(host, port, model, make_system_prompt(), label = 'local bar')
+        ]
+    )
 
-    # condensed_xml = get_condensed_xml(paragraphs[1].xml)
-    # comment_id = 0
-
-    # condensed_xml_with_comment = replace_last_occurrence(
-    #     condensed_xml.replace('<w:r ', f'<w:commentRangeStart w:id="{comment_id}"/><w:r ', 1),
-    #     '</w:r>',
-    #     f'</w:r><w:commentRangeEnd w:id="{comment_id}"/>'
-    # )
-
-    # print(condensed_xml_with_comment)
-
-    # # batched_paragraphs = generate_batches(paragraphs, batch_size)
-
-    # # print(batched_paragraphs[0])
-
-    # for table in tables:
-    #     prompt = make_annotation_prompt(
-    #         table = table
-    #     )
-
-    #     completion = llm.complete(prompt)
-
-    #     print(completion)
-
-    # # content = dumps(
-    # #     {
-    # #         'elements': extracted_elements,
-    # #     },
-    # #     indent = 2,
-    # #     ensure_ascii = False
-    # # )
-
-    # # print(content)
+    annotator.annotate(input_path, output_path, batch_size, n_batches)
 
 
 @main.command()
