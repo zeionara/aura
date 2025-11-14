@@ -157,8 +157,8 @@ def apply(input_path: str, annotations_path: str, output_path: str, threshold: f
 def annotate(input_path: str, output_path: str, host: str, port: int, model: str, batch_size: int, n_batches: int, dry_run: bool):
     annotator = Annotator(
         llms = [
-            VllmClient(host, port, model, make_system_prompt(), label = 'local foo'),
-            VllmClient(host, port, model, make_system_prompt(), label = 'local bar')
+            VllmClient(host, port, model, make_system_prompt(), label = 'mistral-24b'),
+            # VllmClient(host, port, model, make_system_prompt(), label = 'local bar')
         ]
     )
 

@@ -1,15 +1,14 @@
 import re
-from os import path as os_path, mkdir, walk
-from tqdm import tqdm
-
-from logging import getLogger, INFO, ERROR, WARNING
 from time import time
 from string import punctuation
+from os import path as os_path, mkdir, walk
+from logging import getLogger, INFO, ERROR, WARNING
+
+from tqdm import tqdm
 
 from .VllmClient import VllmClient
-from .util import make_system_prompt, make_annotation_prompt, read_elements, dict_to_string, string_to_dict, dict_to_json_file, get_xml, dict_to_json_file, normalize_spaces
+from .util import make_annotation_prompt, read_elements, dict_to_string, string_to_dict, dict_to_json_file, normalize_spaces
 from .document import Paragraph, Cell, Table
-from .document.ZipFile import ZipFile
 
 
 logger = getLogger(__name__)
@@ -138,21 +137,10 @@ class Annotator:
                             continue
 
                         while i < table_label_search_window:
-                            # try:
                             if len(table_label_candidates) > 0:
                                 title = table_label_candidates.pop().lower()
                             else:
                                 break
-                            # except IndexError:
-                            #     logger.error(
-                            #         'Can\'t pop from an empty list (table size = %d x %d, total paragraphs count = %d, total tables count = %d, file = %s)',
-                            #         table.n_rows,
-                            #         table.n_cols,
-                            #         len(paragraphs),
-                            #         len(tables),
-                            #         file
-                            #     )
-                            #     break
 
                             seen_candidates.append(title)
 
@@ -198,24 +186,11 @@ class Annotator:
                             missing_label_count += 1
                             label = f'таблица без названия {missing_label_count}'
 
-                        # if label is None:
-                        #     logger.error(
-                        #         '%s - Can\'t find table label (table size = %d x %d, total paragraphs count = %d, total tables count = %d) among candidates: %s',
-                        #         file,
-                        #         table.n_rows,
-                        #         table.n_cols,
-                        #         len(paragraphs),
-                        #         len(tables),
-                        #         ", ".join(f'"{candidate}"' for candidate in seen_candidates)
-                        #     )
-                        # else:
-
                         label = label.replace('(справочное)', '')
                         label = label.replace('(рекомендуемое)', '')
 
                         while label in seen_labels:
                             label = f'{label}_'
-                            # logger.warning('%s - Duplicate label %s', file, label)
 
                         seen_labels.add(label)
 
@@ -286,7 +261,7 @@ class Annotator:
                                 result = paragraph_scores.get(paragraph.id)
 
                                 if result is None:
-                                    logger.warning('Paragraph "%s" is missing relevance score', paragraph['text'])
+                                    logger.warning('Paragraph "%s" is missing relevance score', paragraph.text)
                                 else:
                                     if iteration == 0:
                                         annotations[table.label]['paragraphs'].append(
@@ -305,7 +280,7 @@ class Annotator:
 
                         offset += len(batched_paragraphs)
 
-                    logger.warning(f'Annotation completed in in {time() - start:.3f} seconds')
+                    logger.warning('Annotation completed in in %.3f seconds', time() - start)
 
                 dict_to_json_file(
                     annotations,

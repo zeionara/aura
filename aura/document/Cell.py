@@ -177,7 +177,7 @@ class Placeholder:
     def n_cols(self):
         return self.origin.n_cols
 
-    def serialize(self):
+    def serialize(self, _with_embeddings: bool = False):
         return {
             'id': self.origin.id
         }
