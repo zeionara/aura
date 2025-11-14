@@ -101,6 +101,47 @@ class Table(ReferentiableObject, Item):
             for row in self.rows
         ]
 
+    @property
+    def cells(self):
+        return [
+            cell.text
+            for row in self.rows
+            for cell in row
+        ]
+
+    @property
+    def n_cells(self):
+        n_cells = 0
+
+        for row in self.rows:
+            for _ in row:
+                n_cells += 1
+
+        return n_cells
+
+    @property
+    def n_rows(self):
+        n_rows = 0
+
+        for _ in self.rows:
+            n_rows += 1
+
+        return n_rows
+
+    @property
+    def n_cols(self):
+        n_cols = 0
+
+        for row in self.rows:
+            n_row_cols = 0
+
+            for _ in row:
+                n_row_cols += 1
+
+            n_cols = max(n_cols, n_row_cols)
+
+        return n_cols
+
     def to_json(self, path: str = None, indent: int = INDENT):
         data = Cell.serialize_rows(self.rows)
 

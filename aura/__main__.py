@@ -2,7 +2,7 @@ from os import walk, path as os_path, mkdir, getenv
 from pathlib import Path
 from queue import Queue
 from json import dump, load
-from logging import getLogger
+from logging import getLogger, StreamHandler, INFO, Formatter
 from random import seed as random_seed
 from torch import optim
 
@@ -30,6 +30,16 @@ MODEL_PARAMS_PATH = None  # 'assets/weights.pth'
 
 DEFAULT_TRAIN_FRACTION = 0.6
 DEFAULT_SEED = 17
+
+root = getLogger()
+
+handler = StreamHandler()
+handler.setLevel(INFO)
+
+formatter = Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+
+root.addHandler(handler)
 
 
 logger = getLogger(__name__)
@@ -143,7 +153,8 @@ def apply(input_path: str, annotations_path: str, output_path: str, threshold: f
 @option('--model', default = 'default')
 @option('--batch-size', '-b', type = int, default = None)
 @option('--n-batches', '-n', type = int, default = None)
-def annotate(input_path: str, output_path: str, host: str, port: int, model: str, batch_size: int, n_batches: int):
+@option('--dry-run', '-d', is_flag = True, default = False)
+def annotate(input_path: str, output_path: str, host: str, port: int, model: str, batch_size: int, n_batches: int, dry_run: bool):
     annotator = Annotator(
         llms = [
             VllmClient(host, port, model, make_system_prompt(), label = 'local foo'),
@@ -151,7 +162,7 @@ def annotate(input_path: str, output_path: str, host: str, port: int, model: str
         ]
     )
 
-    annotator.annotate(input_path, output_path, batch_size, n_batches)
+    annotator.annotate(input_path, output_path, batch_size, n_batches, dry_run = dry_run)
 
 
 @main.command()

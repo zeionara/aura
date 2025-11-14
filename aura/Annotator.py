@@ -2,7 +2,7 @@ import re
 from os import path as os_path, mkdir, walk
 from tqdm import tqdm
 
-from logging import getLogger
+from logging import getLogger, INFO, ERROR
 from time import time
 
 from .VllmClient import VllmClient
@@ -12,9 +12,11 @@ from .document.ZipFile import ZipFile
 
 
 logger = getLogger(__name__)
+logger.setLevel(INFO)
 
 
-TABLE_TITLE_PATTERN = re.compile(r'таблица\s+([^ ]+)\s+.*')
+TABLE_TITLE_PATTERN = re.compile(r'(?:таблица|форма|приложение)\s+([^ ]+)')
+EXCEPTIONAL_TABLE_LABELS = frozenset({'библиография'})
 
 
 def generate_batches(items: list[int], n: int):
@@ -27,7 +29,7 @@ class Annotator:
     def __init__(self, llms: list[VllmClient]):
         self.llms = llms
 
-    def annotate(self, input_path: str, output_path: str, batch_size: int = None, n_batches: int = None, table_label_search_window: int = 5):
+    def annotate(self, input_path: str, output_path: str, batch_size: int = None, n_batches: int = None, table_label_search_window: int = 10, dry_run: bool = False):
         if not os_path.isdir(output_path):
             mkdir(output_path)
 
@@ -38,18 +40,15 @@ class Annotator:
                 if not file.endswith('.docx'):
                     continue
 
-                comment_id = 0
-
                 tables = []
                 paragraphs = []
 
                 annotations = {}
                 offset = 0
 
-                table_label_cahdidates = []
+                table_label_candidates = []
 
                 elements = read_elements(os_path.join(root, file))
-                # file_with_comments = ZipFile(os_path.join(root, file))
                 output_file = file[:-5] + '.json'
 
                 for element in elements:
@@ -58,38 +57,82 @@ class Annotator:
 
                         if paragraph:
                             paragraphs.append(paragraph)
-                            table_label_cahdidates.append(paragraph.text)
-                            # paragraphs.append({
-                            #     'id': paragraph.id,
-                            #     'text': paragraph.text
-                            # })
+                            table_label_candidates.append(paragraph.text)
                     else:
                         i = 0
                         label = None
 
+                        table = Table.from_xml(element)
+                        seen_candidates = []
+
+                        if table.n_cols < 2 or table.n_rows < 2:
+                            continue
+
                         while i < table_label_search_window:
-                            title = table_label_cahdidates.pop().lower()
+                            # try:
+                            if len(table_label_candidates) > 0:
+                                title = table_label_candidates.pop().lower()
+                            else:
+                                break
+                            # except IndexError:
+                            #     logger.error(
+                            #         'Can\'t pop from an empty list (table size = %d x %d, total paragraphs count = %d, total tables count = %d, file = %s)',
+                            #         table.n_rows,
+                            #         table.n_cols,
+                            #         len(paragraphs),
+                            #         len(tables),
+                            #         file
+                            #     )
+                            #     break
+
+                            seen_candidates.append(title)
+
                             i += 1
 
                             match = TABLE_TITLE_PATTERN.match(title)
 
-                            if match is not None:
+                            if match is None:
+                                if title in EXCEPTIONAL_TABLE_LABELS:
+                                    label = title
+                            else:
                                 label = match.group(1)
                                 break
 
+                        if label is None:  # Try to find the table header in the table itself
+                            for cell in table.cells:
+                                title = cell.lower()
+                                match = TABLE_TITLE_PATTERN.match(title)
+
+                                if match is not None:
+                                    label = match.group(1)
+                                    break
+
                         if label is None:
-                            logger.error('Couldn\'t find table label')
+                            logger.error(
+                                '%s - Can\'t find table label (table size = %d x %d, total paragraphs count = %d, total tables count = %d) among candidates: %s',
+                                file,
+                                table.n_rows,
+                                table.n_cols,
+                                len(paragraphs),
+                                len(tables),
+                                ", ".join(f'"{candidate}"' for candidate in seen_candidates)
+                            )
                         else:
                             annotations[label] = {
                                 'type': 'table',
                                 'paragraphs': []
                             }
+                            table.label = label
+                            logger.info('%s - Found table %s', file, label)
 
-                        table_label_search_window = []
-
-                        table = Table.from_xml(element, label = label)
+                        table_label_candidates = []
 
                         tables.append(table)
+
+                logger.info('%s - Found %d tables and %d paragraphs', file, len(tables), len(paragraphs))
+
+                if dry_run:
+                    continue
 
                 batched_paragraphs = generate_batches(paragraphs, batch_size)
 
@@ -102,10 +145,6 @@ class Annotator:
 
                     if table.label is None or table.label not in annotations:
                         continue
-
-                    # file_with_comments.insert_comment(table.xml, table.label, comment_id = comment_id, tag = 'tbl')
-
-                    # comment_id += 1
 
                     start = time()
 
@@ -146,9 +185,6 @@ class Annotator:
                                 if result is None:
                                     logger.warning('Paragraph "%s" is missing relevance score', paragraph['text'])
                                 else:
-                                    # score = result.get('score')
-                                    # comment = result.get('comment')
-
                                     if iteration == 0:
                                         annotations[table.label]['paragraphs'].append(
                                             {
@@ -162,14 +198,6 @@ class Annotator:
                                     else:
                                         annotations[table.label]['paragraphs'][offset + i]['scores'][llms[iteration].label] = result
 
-                                    # if score > score_threshold:
-                                    #     file_with_comments.insert_comment(
-                                    #         paragraph.xml,
-                                    #         f'{table.label} {score:.3f}' if comment is None else f'{table.label} {score:.3f} {comment}',
-                                    #         comment_id = comment_id
-                                    #     )
-                                    #     comment_id += 1
-
                             iteration += 1
 
                         offset += len(batched_paragraphs)
@@ -180,5 +208,3 @@ class Annotator:
                     annotations,
                     os_path.join(output_path, output_file)
                 )
-
-                # file_with_comments.save('assets/test-live.docx')
