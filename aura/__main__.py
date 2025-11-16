@@ -154,7 +154,8 @@ def apply(input_path: str, annotations_path: str, output_path: str, threshold: f
 @option('--batch-size', '-b', type = int, default = None)
 @option('--n-batches', '-n', type = int, default = None)
 @option('--dry-run', '-d', is_flag = True, default = False)
-def annotate(input_path: str, output_path: str, host: str, port: int, model: str, batch_size: int, n_batches: int, dry_run: bool):
+@option('--n-files', '-f', type = int, default = None)
+def annotate(input_path: str, output_path: str, host: str, port: int, model: str, batch_size: int, n_batches: int, dry_run: bool, n_files: int):
     annotator = Annotator(
         llms = [
             VllmClient(host, port, model, make_system_prompt(), label = 'mistral-24b'),
@@ -162,7 +163,7 @@ def annotate(input_path: str, output_path: str, host: str, port: int, model: str
         ]
     )
 
-    annotator.annotate(input_path, output_path, batch_size, n_batches, dry_run = dry_run)
+    annotator.annotate(input_path, output_path, batch_size, n_batches, dry_run = dry_run, n_files = n_files)
 
 
 @main.command()
