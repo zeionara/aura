@@ -1,17 +1,13 @@
 from requests import post
 
+from .LLMClient import LLMClient, TIMEOUT
 
-TIMEOUT = 3600
 
-
-class VllmClient:
+class VllmClient(LLMClient):
     def __init__(self, host: str, port: int, model: str, system_prompt: str, label: str):
-        self.host = host
-        self.port = port
-        self.model = model
-        self.system_prompt = system_prompt
-        self.label = label
+        super().__init__(host, port, system_prompt, label)
 
+        self.model = model
         self.history = []
 
     @property

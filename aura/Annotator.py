@@ -4,9 +4,7 @@ from string import punctuation
 from os import path as os_path, mkdir, walk
 from logging import getLogger, INFO, ERROR, WARNING
 
-from tqdm import tqdm
-
-from .VllmClient import VllmClient
+from .LLMClient import LLMClient
 from .util import make_annotation_prompt, read_elements, dict_to_string, string_to_dict, dict_to_json_file, normalize_spaces
 from .document import Paragraph, Cell, Table
 
@@ -45,7 +43,7 @@ def is_part_of_form(table_label_candidates: list[str]):
     return False
 
 
-def annotate_paragraphs(llm: VllmClient, paragraphs: list[Paragraph], file: str, table: str, max_attempts: int = 3, default = None):
+def annotate_paragraphs(llm: LLMClient, paragraphs: list[Paragraph], file: str, table: str, max_attempts: int = 3, default = None):
     ids_to_annotate = set(paragraph.id for paragraph in paragraphs)
     paragraph_id_to_annotation = {}
 
@@ -120,7 +118,7 @@ def make_table_header(table_label_candidates: list[str]):
     for candidate in table_label_candidates:
         parts = normalize_spaces(candidate).split(' ')
 
-        if len(parts) > 4:
+        if len(parts) > 4 and label_length < 4:
             label_length = 4
             label = remove_punctuation(f'{parts[1]} {parts[2]} {parts[3]} {parts[4]}')
             continue
@@ -149,7 +147,7 @@ def make_table_header(table_label_candidates: list[str]):
 
 
 class Annotator:
-    def __init__(self, llms: list[VllmClient]):
+    def __init__(self, llms: list[LLMClient]):
         self.llms = llms
 
     def annotate(self, input_path: str, output_path: str, batch_size: int = None, n_batches: int = None, table_label_search_window: int = 20, dry_run: bool = False, n_files: int = None):
@@ -275,7 +273,8 @@ class Annotator:
                             'paragraphs': []
                         }
                         table.label = label
-                        logger.info('%s - Found table %s', file, label)
+                        logger.info('%s - Found table %s - %d x %d', file, label, table.n_rows, table.n_cols)
+                        logger.debug('%s - Table %s - %d x %d Content: %s', file, label, table.n_rows, table.n_cols, ', '.join(f'"{cell}"' for cell in table.cells))
 
                         table_label_candidates = []
 
@@ -350,4 +349,4 @@ class Annotator:
 
                 logger.info('%s - Annotation completed in %.3f seconds, results saved as "%s"', file, time() - start_file, output_filename)
 
-        logger.info('Total - Found %d tables and %d paragraphs', n_tables, n_paragraphs)
+        logger.info('Found %d tables and %d paragraphs', n_tables, n_paragraphs)
