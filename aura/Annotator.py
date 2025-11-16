@@ -45,6 +45,73 @@ def is_part_of_form(table_label_candidates: list[str]):
     return False
 
 
+def annotate_paragraphs(llm: VllmClient, paragraphs: list[Paragraph], file: str, max_attempts: int = 3, default = None):
+    ids_to_annotate = set(paragraph.id for paragraph in paragraphs)
+    paragraph_id_to_annotation = {}
+
+    attempt = 1
+
+    logger.info('%s - Annotating %d paragraphs, attempt %d', file, len(paragraphs), attempt)
+
+    while ids_to_annotate:
+        if attempt > max_attempts:
+            for paragraph in paragraphs:
+                if paragraph.id in ids_to_annotate:
+                    logger.warning('%s - Failed to annotate paragraph "%s" after %d atempts, setting score to %s', file, paragraph.text, max_attempts, default)
+                    ids_to_annotate.remove(paragraph.id)
+                    paragraph_id_to_annotation[paragraph.id] = (
+                        {
+                            'id': paragraph.id,
+                            'text': paragraph.text,
+                            'scores': {
+                                llm.label: default
+                            }
+                        }
+                    )
+            continue
+
+        attempt += 1
+
+        completion = llm.complete(
+            dict_to_string(
+                [
+                    {
+                        'id': paragraph.id,
+                        'text': paragraph.text
+                    }
+                    for paragraph in paragraphs
+                    if paragraph.id in ids_to_annotate
+                ]
+            ),
+            add_to_history = False
+        )
+
+        paragraph_scores = string_to_dict(completion)
+
+        for paragraph in paragraphs:
+            result = paragraph_scores.get(paragraph.id)
+
+            if result is None:
+                logger.warning('Paragraph "%s" is missing relevance score', paragraph.text)
+            else:
+                ids_to_annotate.remove(paragraph.id)
+
+                paragraph_id_to_annotation[paragraph.id] = (
+                    {
+                        'id': paragraph.id,
+                        'text': paragraph.text,
+                        'scores': {
+                            llm.label: result
+                        }
+                    }
+                )
+
+    return [
+        paragraph_id_to_annotation[paragraph.id]
+        for paragraph in paragraphs
+    ]
+
+
 def make_table_header(table_label_candidates: list[str]):
     label_length = 0
     label = None
@@ -97,6 +164,8 @@ class Annotator:
             for file in files:
                 if not file.endswith('.docx'):
                     continue
+
+                start_file = time()
 
                 tables = []
                 paragraphs = []
@@ -234,7 +303,7 @@ class Annotator:
                     )
 
                     for llm in llms:
-                        completion = llm.complete(prompt)
+                        llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
 
                     pbar = tqdm(batched_paragraphs, desc = f'Annotating table {table.label}')
 
@@ -242,49 +311,27 @@ class Annotator:
                         iteration = 0
 
                         while iteration < len(llms):
-                            completion = llm.complete(
-                                dict_to_string(
-                                    [
-                                        {
-                                            'id': paragraph.id,
-                                            'text': paragraph.text
-                                        }
-                                        for paragraph in paragraphs_batch
-                                    ]
-                                ),
-                                add_to_history = False
-                            )
+                            annotated_batched_paragraphs = annotate_paragraphs(llm, paragraphs_batch, file)
 
-                            paragraph_scores = string_to_dict(completion)
-
-                            for i, paragraph in enumerate(paragraphs_batch):
-                                result = paragraph_scores.get(paragraph.id)
-
-                                if result is None:
-                                    logger.warning('Paragraph "%s" is missing relevance score', paragraph.text)
-                                else:
-                                    if iteration == 0:
-                                        annotations[table.label]['paragraphs'].append(
-                                            {
-                                                'id': paragraph.id,
-                                                'text': paragraph.text,
-                                                'scores': {
-                                                    llms[iteration].label: result
-                                                }
-                                            }
-                                        )
-                                    else:
-                                        annotations[table.label]['paragraphs'][offset + i]['scores'][llms[iteration].label] = result
+                            if iteration == 0:  # paragraphs from this batch have no annotations yet
+                                annotations[table.label]['paragraphs'].extend(
+                                    annotated_batched_paragraphs
+                                )
+                            else:
+                                for i in enumerate(annotated_batched_paragraphs):
+                                    annotations[table.label]['paragraphs'][offset + i]['scores'][llms[iteration].label] = annotated_batched_paragraphs[i]['scores'][llms[iteration].label]
 
                             iteration += 1
 
                         offset += len(batched_paragraphs)
 
-                    logger.warning('Annotation completed in in %.3f seconds', time() - start)
+                    logger.info('%s - Annotated table %s in %.3f seconds', file, table.label, time() - start)
 
                 dict_to_json_file(
                     annotations,
                     output_filename
                 )
+
+                logger.info('%s - Annotations completed in %.3f, results saved as "%s"', file, time() - start_file, output_filename)
 
         logger.info('Total - Found %d tables and %d paragraphs', n_tables, n_paragraphs)
