@@ -28,7 +28,7 @@ class Paragraph(ReferentiableObject, Item):
         super().__init__(id_)
 
     @classmethod
-    def from_xml(cls, xml: etree.Element, comments: tuple[Comment] = None):
+    def from_xml(cls, xml: etree.Element, comments: tuple[Comment] = None, id_: str = None):
         text = normalize_spaces(get_text(xml))
 
         if not text:
@@ -38,7 +38,8 @@ class Paragraph(ReferentiableObject, Item):
             xml,
             text = text,
             style = get_paragraph_style(xml),
-            comments = comments
+            comments = comments,
+            id_ = id_
         )
 
     @property
