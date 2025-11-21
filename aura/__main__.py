@@ -2,11 +2,11 @@ from os import walk, path as os_path, mkdir, getenv
 from pathlib import Path
 from queue import Queue
 from json import dump, load
-from logging import getLogger, StreamHandler, INFO, Formatter
+from logging import getLogger, StreamHandler, INFO, DEBUG, Formatter
 from random import seed as random_seed
 from torch import optim
 
-from click import group, argument, option
+from click import group, argument, option, Choice
 
 from .util import get_comments, get_elements, get_xml, get_text, read_elements, normalize_spaces, make_annotation_prompt, make_system_prompt, dict_from_json_file  # , get_paragraph_style
 from .document import Paragraph, Table, Document, INDENT, Cell, ZipFile
@@ -17,6 +17,7 @@ from .Stats import Stats
 from .Subset import Subset
 from .embedder.AttentionTableEmbedder import DEFAULT_INPUT_DIM
 from .VllmClient import VllmClient
+from .GigaChatClient import GigaChatClient, GigaChatModel
 from .Annotator import Annotator, TABLE_TITLE_PATTERN
 
 
@@ -34,7 +35,7 @@ DEFAULT_SEED = 17
 root = getLogger()
 
 handler = StreamHandler()
-handler.setLevel(INFO)
+handler.setLevel(DEBUG)
 
 formatter = Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
@@ -148,18 +149,26 @@ def apply(input_path: str, annotations_path: str, output_path: str, threshold: f
 @main.command()
 @argument('input-path', type = str, default = RAW_DATA_PATH)
 @argument('output-path', type = str, default = ANNOTATIONS_PATH)
-@option('--host', default = 'localhost')
-@option('--port', default = 8080)
-@option('--model', default = 'default')
 @option('--batch-size', '-b', type = int, default = None)
 @option('--n-batches', '-n', type = int, default = None)
 @option('--dry-run', '-d', is_flag = True, default = False)
 @option('--n-files', '-f', type = int, default = None)
-def annotate(input_path: str, output_path: str, host: str, port: int, model: str, batch_size: int, n_batches: int, dry_run: bool, n_files: int):
+def annotate(input_path: str, output_path: str, batch_size: int, n_batches: int, dry_run: bool, n_files: int):
     annotator = Annotator(
         llms = [
-            VllmClient(host, port, model, make_system_prompt(), label = 'mistral-24b'),
-            # VllmClient(host, port, model, make_system_prompt(), label = 'local bar')
+            VllmClient(
+                getenv('AURA_VLLM_HOST'),
+                int(getenv('AURA_VLLM_PORT')),
+                getenv('AURA_VLLM_MODEL'),
+                make_system_prompt(),
+                label = getenv('AURA_VLLM_LABEL')
+            ),
+            GigaChatClient(
+                getenv('AURA_GIGACHAT_AUTHORIZATION_KEY'),
+                GigaChatModel(getenv('AURA_GIGACHAT_MODEL')),
+                make_system_prompt(),
+                label = getenv('AURA_GIGACHAT_LABEL')
+            )
         ]
     )
 

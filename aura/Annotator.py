@@ -2,7 +2,7 @@ import re
 from time import time
 from string import punctuation
 from os import path as os_path, mkdir, walk
-from logging import getLogger, INFO, ERROR, WARNING
+from logging import getLogger, INFO, ERROR, WARNING, DEBUG
 
 from .LLMClient import LLMClient
 from .util import make_annotation_prompt, read_elements, dict_to_string, string_to_dict, dict_to_json_file, normalize_spaces, dict_from_json_file
@@ -10,7 +10,7 @@ from .document import Paragraph, Cell, Table
 
 
 logger = getLogger(__name__)
-logger.setLevel(INFO)
+logger.setLevel(DEBUG)
 
 
 TABLE_TITLE_PATTERN = re.compile(r'(?:таблица|форма|приложение)\s+([^ ]+)')
@@ -174,8 +174,6 @@ def annotate_paragraphs(llm: LLMClient, paragraphs: list[Paragraph], file: str, 
 
     attempt = 1
 
-    logger.info('%s - Table %s - Annotating %d paragraphs, attempt %d', file, table, len(paragraphs), attempt)
-
     while ids_to_annotate:
         if attempt > max_attempts:
             for paragraph in paragraphs:
@@ -193,6 +191,7 @@ def annotate_paragraphs(llm: LLMClient, paragraphs: list[Paragraph], file: str, 
                     )
             continue
 
+        logger.info('%s - Table %s - Annotating %d paragraphs, attempt %d', file, table, len(ids_to_annotate), attempt)
         attempt += 1
 
         completion = llm.complete(

@@ -5,7 +5,10 @@ from .LLMClient import LLMClient, TIMEOUT
 
 class VllmClient(LLMClient):
     def __init__(self, host: str, port: int, model: str, system_prompt: str, label: str):
-        super().__init__(host, port, system_prompt, label)
+        super().__init__(system_prompt, label)
+
+        self.host = host
+        self.port = port
 
         self.model = model
         self.history = []

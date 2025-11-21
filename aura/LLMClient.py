@@ -5,9 +5,7 @@ TIMEOUT = 3600
 
 
 class LLMClient(ABC):
-    def __init__(self, host: str, port: int, system_prompt: str, label: str):
-        self.host = host
-        self.port = port
+    def __init__(self, system_prompt: str, label: str):
         self.system_prompt = system_prompt
         self.label = label
 
