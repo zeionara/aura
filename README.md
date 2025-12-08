@@ -15,11 +15,52 @@ pip install lxml transformers torch torchvision torchaudio pandas scikit-learn
 
 ## Automatic annotation
 
+To train table embedding model, you need to annotate some data. The document annotation consists of the following two stages.
+As an input, the annotation procedure takes a set of `.docx` documents, and as output, it produces another set of `.docx` documents with comments, which contain paragraph annotation.
+Each paragraph annotations contains information about the relevance of a particular paragraph to a document table.
+
+### Generating annotations
+
 To annotate tables using LLM, first, generate the annotations:
 
 ```sh
-python -m aura annotate assets/data/<version>/source assets/data/<version>/annotations --host localhost --port 8080 --model 'default' --batch-size 10
+python -m aura annotate assets/data/<version>/source assets/data/<version>/annotations --batch-size 10
 ```
+
+To handle limited number of data use parameters `--n-batches` and `--n-files` (this command will handle `2` first batches, each including `10` paragraphs for the first `2` files in the provided directory):
+
+```sh
+python -m aura annotate assets/data/<version>/source assets/data/<version>/annotations --batch-size 10 --n-batches 2 --n-files 2
+```
+
+The command will generate a set of `.json` files in the target directory, each output `.json` file corresponds to an input `.docx` file and structured as follows (the score `0.7` is provided as an example, there score value might be any real number in the interval `[0; 1]`):
+
+```json
+{
+    "[inferred table name]": {
+        "type": "table",
+        "paragraphs": [
+            {
+                "id": "[uuid4]",
+                "text": "[paragraph text]",
+                "scores": {
+                    "[model name]": {
+                        "comment": "[assigned score justification]",
+                        "score": 0.7
+                    }
+                }
+            },
+            ...
+        ]
+    },
+
+    ...
+}
+```
+
+The script supports extending previously generated annotations located in the target folder. If required score is already provided, then it will not be calculated again.
+
+### Applying annotations
 
 Then apply these annotations:
 
@@ -27,7 +68,7 @@ Then apply these annotations:
 python -m aura apply assets/data/<version>/source assets/data/<version>/annotations assets/data/<version>/raw --threshold 0.5
 ```
 
-## Annotation report generation workflow
+## Embedding model training
 
 1. Download annotated `docx` files and put them to folder `$HOME/Document/PhD/$version`
 2. Upload to remote server: `phdta $version` (`phdta` is a `bash` function implemented [here](https://github.com/zeionara/shell/blob/71eb0fba4cd0d4af3d4c505d85f71868d88d20c8/phd.sh#L1))
