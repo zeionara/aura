@@ -153,7 +153,7 @@ def apply(input_path: str, annotations_path: str, output_path: str, threshold: f
 @option('--n-batches', '-n', type = int, default = None)
 @option('--dry-run', '-d', is_flag = True, default = False)
 @option('--n-files', '-f', type = int, default = None)
-@option('--file-offset', '-o', type = int, default = None)
+@option('--file-offset', '-o', type = int, default = 0)
 def annotate(input_path: str, output_path: str, batch_size: int, n_batches: int, dry_run: bool, n_files: int, file_offset: int):
     annotator = Annotator(
         llms = [

@@ -580,6 +580,7 @@ class Annotator:
                             previous_table_annotations = merged_table_annotations
                         else:
                             logger.debug('%s - Table %s - LLM "%s" Skip initialization because there are no data to handle', file, table.label, llm.label)
+                            set_table_annotations(table.label, annotations, previous_table_annotations)
 
                     # n_batches = len(batched_paragraphs)
                     # batch_count = 0
