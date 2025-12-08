@@ -153,7 +153,8 @@ def apply(input_path: str, annotations_path: str, output_path: str, threshold: f
 @option('--n-batches', '-n', type = int, default = None)
 @option('--dry-run', '-d', is_flag = True, default = False)
 @option('--n-files', '-f', type = int, default = None)
-def annotate(input_path: str, output_path: str, batch_size: int, n_batches: int, dry_run: bool, n_files: int):
+@option('--file-offset', '-o', type = int, default = None)
+def annotate(input_path: str, output_path: str, batch_size: int, n_batches: int, dry_run: bool, n_files: int, file_offset: int):
     annotator = Annotator(
         llms = [
             VllmClient(
@@ -163,6 +164,13 @@ def annotate(input_path: str, output_path: str, batch_size: int, n_batches: int,
                 make_system_prompt(),
                 label = getenv('AURA_VLLM_LABEL')
             ),
+            # VllmClient(
+            #     getenv('AURA_VLLM_HOST'),
+            #     int(getenv('AURA_VLLM_PORT')),
+            #     getenv('AURA_VLLM_MODEL'),
+            #     make_system_prompt(),
+            #     label = getenv('AURA_VLLM_LABEL') + "-duplicate"
+            # ),
             GigaChatClient(
                 getenv('AURA_GIGACHAT_AUTHORIZATION_KEY'),
                 GigaChatModel(getenv('AURA_GIGACHAT_MODEL')),
@@ -172,7 +180,7 @@ def annotate(input_path: str, output_path: str, batch_size: int, n_batches: int,
         ]
     )
 
-    annotator.annotate(input_path, output_path, batch_size, n_batches, dry_run = dry_run, n_files = n_files)
+    annotator.annotate(input_path, output_path, batch_size, n_batches, dry_run = dry_run, n_files = n_files, file_offset = file_offset)
 
 
 @main.command()
