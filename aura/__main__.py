@@ -171,12 +171,12 @@ def annotate(input_path: str, output_path: str, batch_size: int, n_batches: int,
             #     make_system_prompt(),
             #     label = getenv('AURA_VLLM_LABEL') + "-duplicate"
             # ),
-            GigaChatClient(
-                getenv('AURA_GIGACHAT_AUTHORIZATION_KEY'),
-                GigaChatModel(getenv('AURA_GIGACHAT_MODEL')),
-                make_system_prompt(),
-                label = getenv('AURA_GIGACHAT_LABEL')
-            )
+            # GigaChatClient(
+            #     getenv('AURA_GIGACHAT_AUTHORIZATION_KEY'),
+            #     GigaChatModel(getenv('AURA_GIGACHAT_MODEL')),
+            #     make_system_prompt(),
+            #     label = getenv('AURA_GIGACHAT_LABEL')
+            # )
         ]
     )
 
