@@ -357,7 +357,12 @@ class Annotator:
     def __init__(self, llms: list[LLMClient]):
         self.llms = llms
 
-    def annotate(self, input_path: str, output_path: str, batch_size: int = None, n_batches: int = None, table_label_search_window: int = 20, dry_run: bool = False, n_files: int = None, file_offset: int = 0):
+    def annotate(
+        self, input_path: str, output_path: str,
+        batch_size: int = None, n_batches: int = None,
+        table_label_search_window: int = 20,
+        dry_run: bool = False, n_files: int = None, file_offset: int = 0, ckpt_period: int = None
+    ):
         if not os_path.isdir(output_path):
             mkdir(output_path)
 
@@ -366,13 +371,26 @@ class Annotator:
         n_tables = 0
         n_paragraphs = 0
 
+        files_counter = 0
+        if n_files is None:
+            files_total = 0
+
+            for root, _, files in walk(input_path):
+                for file in files:
+                    files_total += 1
+        else:
+            files_total = n_files
+
         for root, _, files in walk(input_path):
             for file in files:
+                files_counter += 1
+
                 if not file.endswith('.docx'):
                     continue
 
                 if file_offset > 0:
                     file_offset -= 1
+                    n_files -= 1
                     continue
 
                 if n_files is not None:
@@ -399,6 +417,8 @@ class Annotator:
 
                 output_file = file[:-5] + '.json'
                 output_filename = os_path.join(output_path, output_file)
+
+                file = f'{file} [{files_counter} / {files_total}]'
 
                 previous_paragraph_ids = None
 
@@ -518,10 +538,14 @@ class Annotator:
 
                 logger.info('%s - Found %d tables and %d paragraphs', file, len(tables), len(paragraphs))
 
+                tables_counter = 0
+                tables_total = len(tables)
+
                 if dry_run:
                     continue
 
                 for table in tables:
+                    tables_counter += 1
 
                     if table.label is None or table.label not in annotations:
                         continue
@@ -536,10 +560,9 @@ class Annotator:
                         previous_table_annotations := get_previous_table_annotations(table.label, previous_annotations)
                     )
 
-                    # if n_batches is not None:
-                    #     batched_paragraphs = batched_paragraphs[:n_batches]
+                    table_label = f'{table.label} [{tables_counter} / {tables_total}]'
 
-                    logger.debug('%s - Table %s - Annotation started', file, table.label)
+                    logger.debug('%s - Table %s - Annotation started', file, table_label)
 
                     for llm in llms:
                         if len(llm_to_batched_paragraphs[llm.label]) > 0:
@@ -555,7 +578,7 @@ class Annotator:
                     for llm in llms:
                         if len(llm_to_batched_paragraphs[llm.label]) > 0:
                             completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
-                            logger.debug('%s - Table %s - LLM "%s" response to the initialization message: "%s"', file, table.label, llm.label, completion)
+                            logger.debug('%s - Table %s - LLM "%s" response to the initialization message: "%s"', file, table_label, llm.label, completion)
 
                             batched_paragraphs = llm_to_batched_paragraphs[llm.label]
                             table_llm_annotations = []
@@ -565,7 +588,7 @@ class Annotator:
 
                             for paragraphs_batch in batched_paragraphs:
                                 batch_count += 1
-                                logger.info('%s - Table %s - LLM %s - batch %d / %d', file, table.label, llm.label, batch_count, n_batches)
+                                logger.info('%s - Table %s - LLM %s - batch %d / %d', file, table_label, llm.label, batch_count, n_batches)
 
                                 table_llm_annotations_batch = annotate_paragraphs(
                                     llm,
@@ -575,66 +598,26 @@ class Annotator:
                                 )
                                 table_llm_annotations.extend(table_llm_annotations_batch)
 
-                            merged_table_annotations = merge_annotations(llm.label, table_llm_annotations, previous_table_annotations, previous_paragraph_ids)
-                            set_table_annotations(table.label, annotations, merged_table_annotations)
-                            previous_table_annotations = merged_table_annotations
+                                if ckpt_period is not None and batch_count % ckpt_period < 1:
+                                    merged_table_annotations = merge_annotations(llm.label, table_llm_annotations, previous_table_annotations, previous_paragraph_ids)
+                                    set_table_annotations(table.label, annotations, merged_table_annotations)
+                                    previous_table_annotations = merged_table_annotations
+
+                                    table_llm_annotations = []
+                                    dict_to_json_file(annotations, output_filename)
+                                    logger.info('%s - Table %s - LLM %s - batch %d / %d CHECKPOINT Saved to file %s', file, table_label, llm.label, batch_count, n_batches, output_filename)
+
+                            if len(table_llm_annotations) > 0:
+                                merged_table_annotations = merge_annotations(llm.label, table_llm_annotations, previous_table_annotations, previous_paragraph_ids)
+                                set_table_annotations(table.label, annotations, merged_table_annotations)
+                                previous_table_annotations = merged_table_annotations
                         else:
-                            logger.debug('%s - Table %s - LLM "%s" Skip initialization because there are no data to handle', file, table.label, llm.label)
+                            logger.debug('%s - Table %s - LLM "%s" Skip initialization because there are no data to handle', file, table_label, llm.label)
                             set_table_annotations(table.label, annotations, previous_table_annotations)
 
-                    # n_batches = len(batched_paragraphs)
-                    # batch_count = 0
+                    logger.info('%s - Table %s - Annotation completed in %.3f seconds', file, table_label, time() - start)
 
-                    # for paragraphs_batch in batched_paragraphs:
-                    #     iteration = 0
-
-                    #     batch_count += 1
-                    #     logger.info('%s - Table %s - batch %d / %d', file, table.label, batch_count, n_batches)
-
-                    #     while iteration < len(llms):
-                    #         annotated_batched_paragraphs = annotate_paragraphs(
-                    #             llms[iteration],
-                    #             (
-                    #                 paragraphs_batch
-                    #                 if previous_annotations is None else
-                    #                 [
-                    #                     paragraph
-                    #                     for paragraph in paragraphs_batch
-                    #                     if not is_already_annotated(file, table.label, paragraph.id, llms[iteration].label, previous_annotations)
-                    #                 ]
-                    #             ),
-                    #             file,
-                    #             table.label
-                    #         )
-
-                    #         for paragraph in annotated_batched_paragraphs:
-                    #             paragraph_offset = get_paragraph_offset(file, table.label, annotations[table.label]['paragraphs'], paragraph)
-
-                    #             if paragraph_offset is None:
-                    #                 annotations[table.label]['paragraphs'].append(
-                    #                     paragraph
-                    #                 )
-                    #             else:
-                    #                 annotations[table.label]['paragraphs'][paragraph_offset]['scores'][llms[iteration].label] = annotated_batched_paragraphs[i]['scores'][llms[iteration].label]
-
-                    #         # if iteration == 0:  # paragraphs from this batch have no annotations yet
-                    #         #     annotations[table.label]['paragraphs'].extend(
-                    #         #         annotated_batched_paragraphs
-                    #         #     )
-                    #         # else:
-                    #         #     for i in enumerate(annotated_batched_paragraphs):
-                    #         #         annotations[table.label]['paragraphs'][offset + i]['scores'][llms[iteration].label] = annotated_batched_paragraphs[i]['scores'][llms[iteration].label]
-
-                    #         iteration += 1
-
-                    logger.info('%s - Table %s - Annotation completed in %.3f seconds', file, table.label, time() - start)
-
-                # merged_annotations = merge_annotations(file, [paragraph.id for paragraph in paragraphs], annotations, previous_annotations)
-
-                dict_to_json_file(
-                    annotations,
-                    output_filename
-                )
+                dict_to_json_file(annotations, output_filename)
 
                 logger.info('%s - Annotation completed in %.3f seconds, results saved as "%s"', file, time() - start_file, output_filename)
 
