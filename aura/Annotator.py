@@ -594,7 +594,7 @@ class Annotator:
                                     llm,
                                     paragraphs_batch,
                                     file,
-                                    table.label
+                                    table_label
                                 )
                                 table_llm_annotations.extend(table_llm_annotations_batch)
 
