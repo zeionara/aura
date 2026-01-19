@@ -7,10 +7,12 @@ from logging import getLogger, INFO, ERROR, WARNING, DEBUG
 from .LLMClient import LLMClient
 from .util import make_annotation_prompt, read_elements, dict_to_string, string_to_dict, dict_to_json_file, normalize_spaces, dict_from_json_file
 from .document import Paragraph, Cell, Table
+from .Annotations import Annotations
 
 
 logger = getLogger(__name__)
-logger.setLevel(DEBUG)
+# logger.setLevel(DEBUG)
+logger.setLevel(INFO)
 
 
 TABLE_TITLE_PATTERN = re.compile(r'(?:таблица|форма|приложение)\s+([^ ]+)')
@@ -167,91 +169,6 @@ def merge_annotations(llm: str, annotations: list, previous_annotations: list = 
     return merged_annotations
 
 
-# def merge_annotations(file: str, paragraph_ids: list[str], lhs: dict, rhs: dict = None):
-#     if rhs is None:
-#         return lhs
-# 
-#     merged = {}
-# 
-#     for lhs_table_label, lhs_table_annotations in lhs.items():
-#         rhs_table_annotations = rhs.get(lhs_table_label)
-# 
-#         if rhs_table_annotations is None:
-#             merged[lhs_table_label] = lhs_table_annotations
-#             continue
-# 
-#         merged[lhs_table_label] = {
-#             'type': 'table',
-#             'paragraphs': []
-#         }
-# 
-#         for paragraph_id in paragraph_ids:
-#             lhs_paragraph = None
-#             rhs_paragraph = None
-# 
-#             for lhs_paragraph_candidate in lhs_table_annotations['paragraphs']:
-#                 lhs_paragraph_id = lhs_paragraph_candidate.get('id')
-# 
-#                 if lhs_paragraph_id == paragraph_id:
-#                     lhs_paragraph = lhs_paragraph_candidate
-# 
-#             for rhs_paragraph_candidate in rhs_table_annotations['paragraphs']:
-#                 rhs_paragraph_id = rhs_paragraph_candidate.get('id')
-# 
-#                 if rhs_paragraph_id == paragraph_id:
-#                     rhs_paragraph = rhs_paragraph_candidate
-# 
-#             if lhs_paragraph is None and rhs_paragraph is None:
-#                 continue
-# 
-#             merged_paragraph = {
-#                 'id': paragraph_id,
-#                 'text': (
-#                     rhs_paragraph if lhs_paragraph is None else lhs_paragraph
-#                 ).get('text'),
-#                 'scores': {}
-#             }
-# 
-#             if lhs_paragraph is not None:
-#                 for llm, score in lhs_paragraph['scores'].items():
-#                     merged_paragraph['scores'][llm] = score
-# 
-#             if rhs_paragraph is not None:
-#                 for llm, score in rhs_paragraph['scores'].items():
-#                     if llm in merged_paragraph['scores']:
-#                         logger.error('%s - %s - Collided paragraph annotations by %s. Dismissing rhs', file, lhs_table_label, llm)
-#                     else:
-#                         merged_paragraph['scores'][llm] = score
-# 
-#             merged[lhs_table_label]['paragraphs'].append(merged_paragraph)
-# 
-#         # for lhs_paragraph in lhs_table_annotations['paragraphs']:
-#         #     lhs_paragraph_id = lhs_paragraph.get('id')
-# 
-#         #     for rhs_paragraph in rhs_table_annotations['paragraphs']:
-#         #         rhs_paragraph_id = rhs_paragraph.get('id')
-# 
-#         #         if lhs_paragraph_id == rhs_paragraph_id:
-#         #             merged_paragraph = {
-#         #                 'id': lhs_paragraph_id,
-#         #                 'text': lhs_paragraph.get('text'),
-#         #                 'scores': {}
-#         #             }
-# 
-#         #             for llm, score in lhs_paragraph['scores'].items():
-#         #                 merged_paragraph['scores'][llm] = score
-# 
-#         #             for llm, score in rhs_paragraph['scores'].items():
-#         #                 if llm in merged_paragraph['scores']:
-#         #                     logger.error('%s - %s - Collided paragraph annotations by %s. Dismissing rhs', file, lhs_table_label, llm)
-#         #                 else:
-#         #                     merged_paragraph['scores'][llm] = score
-# 
-#         #             merged[lhs_table_label]['paragraphs'].append(merged_paragraph)
-# 
-#     return merged
-
-
 def annotate_paragraphs(llm: LLMClient, paragraphs: list[Paragraph], file: str, table: str, max_attempts: int = 3, default = None):
     if len(paragraphs) < 1:
         return []
@@ -297,6 +214,9 @@ def annotate_paragraphs(llm: LLMClient, paragraphs: list[Paragraph], file: str, 
         paragraph_scores = string_to_dict(completion)
 
         for paragraph in paragraphs:
+            if paragraph.id not in ids_to_annotate:
+                continue
+
             result = paragraph_scores.get(paragraph.id)
 
             if result is None:
@@ -424,14 +344,15 @@ class Annotator:
 
                 if os_path.isfile(output_filename):
                     # logger.info('%s - File "%s" already exists. Moving forward', file, output_filename)
-                    previous_annotations = dict_from_json_file(output_filename)
+                    # previous_annotations = dict_from_json_file(output_filename)
+                    previous_annotations = Annotations.from_file(output_filename)
 
-                    previous_annotations_values = list(previous_annotations.values())  # synchronize existing paragraph ids and new paragraph ids
-                    if len(previous_annotations_values) > 0:
-                        previous_paragraph_ids = [
-                            paragraph['id']
-                            for paragraph in previous_annotations_values[0]['paragraphs']
-                        ]
+                    # previous_annotations_values = list(previous_annotations.values())  # synchronize existing paragraph ids and new paragraph ids
+
+                    logger.info('Found %d tables in the previous annotation results', previous_annotations.n_tables)
+
+                    if previous_annotations.n_tables > 0:
+                        previous_paragraph_ids = list(previous_annotations.paragraph_ids)
 
                 if previous_paragraph_ids is None:
                     previous_paragraph_ids = []
@@ -524,7 +445,8 @@ class Annotator:
 
                         annotations[label] = {
                             'type': 'table',
-                            'paragraphs': []
+                            # 'paragraphs': []
+                            'paragraphs': previous_annotations.table_to_paragraphs.get(label, {'paragraphs': []})['paragraphs']
                         }
                         table.label = label
                         logger.info('%s - Found table %s - %d x %d', file, label, table.n_rows, table.n_cols)
@@ -536,7 +458,13 @@ class Annotator:
 
                         n_tables += 1
 
-                logger.info('%s - Found %d tables and %d paragraphs', file, len(tables), len(paragraphs))
+                logger.info(
+                    '%s - Found %d tables and %d paragraphs%s',
+                    file,
+                    len(tables),
+                    len(paragraphs),
+                    '' if not dry_run else '. Annotation is complete 🟢' if previous_annotations.is_complete(len(tables), len(paragraphs)) else '. Annotation is incomplete 🔴'
+                )
 
                 tables_counter = 0
                 tables_total = len(tables)
@@ -548,6 +476,7 @@ class Annotator:
                     tables_counter += 1
 
                     if table.label is None or table.label not in annotations:
+                        logger.warning('Missing table %s in annotations list', table.label)
                         continue
 
                     start = time()
@@ -557,7 +486,7 @@ class Annotator:
                         batch_size,
                         self.llms,
                         n_batches,
-                        previous_table_annotations := get_previous_table_annotations(table.label, previous_annotations)
+                        previous_table_annotations := get_previous_table_annotations(table.label, previous_annotations.table_to_paragraphs)
                     )
 
                     table_label = f'{table.label} [{tables_counter} / {tables_total}]'
@@ -583,12 +512,12 @@ class Annotator:
                             batched_paragraphs = llm_to_batched_paragraphs[llm.label]
                             table_llm_annotations = []
 
-                            n_batches = len(batched_paragraphs)
+                            n_generated_batches = len(batched_paragraphs)
                             batch_count = 0
 
                             for paragraphs_batch in batched_paragraphs:
                                 batch_count += 1
-                                logger.info('%s - Table %s - LLM %s - batch %d / %d', file, table_label, llm.label, batch_count, n_batches)
+                                logger.info('%s - Table %s - LLM %s - batch %d / %d', file, table_label, llm.label, batch_count, n_generated_batches)
 
                                 table_llm_annotations_batch = annotate_paragraphs(
                                     llm,
@@ -605,7 +534,7 @@ class Annotator:
 
                                     table_llm_annotations = []
                                     dict_to_json_file(annotations, output_filename)
-                                    logger.info('%s - Table %s - LLM %s - batch %d / %d CHECKPOINT Saved to file %s', file, table_label, llm.label, batch_count, n_batches, output_filename)
+                                    logger.info('%s - Table %s - LLM %s - batch %d / %d CHECKPOINT Saved to file %s', file, table_label, llm.label, batch_count, n_generated_batches, output_filename)
 
                             if len(table_llm_annotations) > 0:
                                 merged_table_annotations = merge_annotations(llm.label, table_llm_annotations, previous_table_annotations, previous_paragraph_ids)
