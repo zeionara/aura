@@ -193,7 +193,7 @@ def annotate_paragraphs(llm: LLMClient, paragraphs: list[Paragraph], file: str, 
                     )
             continue
 
-        logger.info('%s - Table %s - Annotating %d paragraphs, attempt %d', file, table, len(ids_to_annotate), attempt)
+        logger.debug('%s - Table %s - Annotating %d paragraphs, attempt %d', file, table, len(ids_to_annotate), attempt)
         attempt += 1
 
         completion = llm.complete(
@@ -301,6 +301,8 @@ class Annotator:
         else:
             files_total = n_files
 
+        files_incomplete = 0
+
         for root, _, files in walk(input_path):
             for file in files:
                 files_counter += 1
@@ -349,7 +351,7 @@ class Annotator:
 
                     # previous_annotations_values = list(previous_annotations.values())  # synchronize existing paragraph ids and new paragraph ids
 
-                    logger.info('Found %d tables in the previous annotation results', previous_annotations.n_tables)
+                    logger.debug('Found %d tables in the previous annotation results', previous_annotations.n_tables)
 
                     if previous_annotations.n_tables > 0:
                         previous_paragraph_ids = list(previous_annotations.paragraph_ids)
@@ -449,7 +451,7 @@ class Annotator:
                             'paragraphs': previous_annotations.table_to_paragraphs.get(label, {'paragraphs': []})['paragraphs']
                         }
                         table.label = label
-                        logger.info('%s - Found table %s - %d x %d', file, label, table.n_rows, table.n_cols)
+                        logger.debug('%s - Found table %s - %d x %d', file, label, table.n_rows, table.n_cols)
                         logger.debug('%s - Table %s - %d x %d Content: %s', file, label, table.n_rows, table.n_cols, ', '.join(f'"{cell}"' for cell in table.cells))
 
                         table_label_candidates = []
@@ -458,13 +460,20 @@ class Annotator:
 
                         n_tables += 1
 
+                previous_annotations_is_complete = None
+
                 logger.info(
                     '%s - Found %d tables and %d paragraphs%s',
                     file,
                     len(tables),
                     len(paragraphs),
-                    '' if not dry_run else '. Annotation is complete 🟢' if previous_annotations.is_complete(len(tables), len(paragraphs)) else '. Annotation is incomplete 🔴'
+                    '' if not dry_run else '. Annotation is complete 🟢' if (
+                        previous_annotations_is_complete := previous_annotations.is_complete(len(tables), len(paragraphs))
+                    ) else '. Annotation is incomplete 🔴'
                 )
+
+                if previous_annotations_is_complete is False:
+                    files_incomplete += 1
 
                 tables_counter = 0
                 tables_total = len(tables)
@@ -550,4 +559,4 @@ class Annotator:
 
                 logger.info('%s - Annotation completed in %.3f seconds, results saved as "%s"', file, time() - start_file, output_filename)
 
-        logger.info('Found %d tables and %d paragraphs', n_tables, n_paragraphs)
+        logger.info('Found %d tables and %d paragraphs, %d / %d documents are incomplete', n_tables, n_paragraphs, files_incomplete, files_total)
