@@ -3,8 +3,12 @@ from time import time
 from string import punctuation
 from os import path as os_path, mkdir, walk
 from logging import getLogger, INFO, ERROR, WARNING, DEBUG
+from concurrent.futures import ThreadPoolExecutor
+from threading import get_ident
+from time import sleep
 
 from .LLMClient import LLMClient
+from .VllmClient import VllmClient
 from .util import make_annotation_prompt, read_elements, dict_to_string, string_to_dict, dict_to_json_file, normalize_spaces, dict_from_json_file
 from .document import Paragraph, Cell, Table
 from .Annotations import Annotations
@@ -273,290 +277,269 @@ def make_table_header(table_label_candidates: list[str]):
     return label
 
 
+# def handle_file(llm_configs: list[dict], input_root: str, input_filename: str, output_path: str, batch_size: int, n_batches: int, table_label_search_window: int, ckpt_period: int):
+def handle_file(args):
+    llm_configs, input_root, input_filename, output_path, batch_size, n_batches, table_label_search_window, ckpt_period = args
+
+    logger.info('Handling file %s in thread %d', input_filename, get_ident())
+
+    if not input_filename.endswith('.docx'):
+        return
+
+    llms = [VllmClient(**config) for config in llm_configs]
+
+    start_file = time()
+
+    tables = []
+    paragraphs = []
+
+    annotations = {}
+    previous_annotations = None
+
+    form_count = 0
+    missing_label_count = 0
+
+    table_label_candidates = []
+    seen_labels = set()
+
+    elements = read_elements(os_path.join(input_root, input_filename))
+
+    output_file = input_filename[:-5] + '.json'
+    output_filename = os_path.join(output_path, output_file)
+
+    file = f'{input_filename}'
+
+    previous_paragraph_ids = None
+
+    if os_path.isfile(output_filename):
+        # logger.info('%s - File "%s" already exists. Moving forward', file, output_filename)
+        # previous_annotations = dict_from_json_file(output_filename)
+        previous_annotations = Annotations.from_file(output_filename)
+
+        # previous_annotations_values = list(previous_annotations.values())  # synchronize existing paragraph ids and new paragraph ids
+
+        logger.debug('Found %d tables in the previous annotation results', previous_annotations.n_tables)
+
+        if previous_annotations.n_tables > 0:
+            previous_paragraph_ids = list(previous_annotations.paragraph_ids)
+
+    if previous_paragraph_ids is None:
+        previous_paragraph_ids = []
+
+    for element in elements:
+        if element.tag.endswith('}p'):
+            paragraph = Paragraph.from_xml(
+                element,
+                id_ = None if previous_paragraph_ids is None or len(paragraphs) >= len(previous_paragraph_ids) else previous_paragraph_ids[len(paragraphs)]
+            )
+
+            if paragraph:
+                paragraphs.append(paragraph)
+                table_label_candidates.append(paragraph.text)
+
+                if len(paragraphs) > len(previous_paragraph_ids):
+                    previous_paragraph_ids.append(paragraph.id)
+        else:
+            if len(paragraphs) < 1:
+                continue
+
+            i = 0
+            label = None
+
+            table = Table.from_xml(element)
+            seen_candidates = []
+
+            if table.n_cols < 2 or table.n_rows < 2:
+                continue
+
+            while i < table_label_search_window:
+                if len(table_label_candidates) > 0:
+                    title = table_label_candidates.pop().lower()
+                else:
+                    break
+
+                seen_candidates.append(title)
+
+                i += 1
+
+                match = TABLE_TITLE_PATTERN.match(title)
+
+                if match is None:
+                    if title in EXCEPTIONAL_TABLE_LABELS:
+                        label = title
+                elif match.group(1) not in FORBIDDEN_TABLE_LABELS:
+                    label = match.group(1)
+
+                    if 'форма' in title:
+                        label = f'форма {label}'
+
+                    if 'приложение' in title:
+                        label = f'приложение {label}'
+
+                    break
+
+            if label is None:  # Try to find the table header in the table itself
+                for cell in table.cells:
+                    if cell is None:
+                        continue
+
+                    title = cell.lower()
+                    match = TABLE_TITLE_PATTERN.match(title)
+
+                    if match is not None:
+                        label = match.group(1)
+                        break
+
+            if is_part_of_form(seen_candidates):
+                form_count += 1
+                label = f'часть формы {form_count}'
+
+            if label is None:  # Try to generate table name from seen candidates
+                label = make_table_header(seen_candidates)
+                logger.warning('%s - Had to generate table name "%s"', file, label)
+
+            if label is None:
+                missing_label_count += 1
+                label = f'таблица без названия {missing_label_count}'
+
+            label = label.replace('(справочное)', '')
+            label = label.replace('(рекомендуемое)', '')
+
+            while label in seen_labels:
+                label = f'{label}_'
+
+            seen_labels.add(label)
+
+            annotations[label] = {
+                'type': 'table',
+                # 'paragraphs': []
+                'paragraphs': previous_annotations.table_to_paragraphs.get(label, {'paragraphs': []})['paragraphs']
+            }
+            table.label = label
+            logger.debug('%s - Found table %s - %d x %d', file, label, table.n_rows, table.n_cols)
+            logger.debug('%s - Table %s - %d x %d Content: %s', file, label, table.n_rows, table.n_cols, ', '.join(f'"{cell}"' for cell in table.cells))
+
+            table_label_candidates = []
+
+            tables.append(table)
+
+    logger.info(
+        '%s - Found %d tables and %d paragraphs',
+        file,
+        len(tables),
+        len(paragraphs)
+    )
+
+    tables_counter = 0
+    tables_total = len(tables)
+
+    for table in tables:
+        tables_counter += 1
+
+        if table.label is None or table.label not in annotations:
+            logger.warning('Missing table %s in annotations list', table.label)
+            continue
+
+        start = time()
+
+        llm_to_batched_paragraphs = generate_batches(
+            paragraphs,
+            batch_size,
+            llms,
+            n_batches,
+            previous_table_annotations := get_previous_table_annotations(table.label, previous_annotations.table_to_paragraphs)
+        )
+
+        table_label = f'{table.label} [{tables_counter} / {tables_total}]'
+
+        logger.debug('%s - Table %s - Annotation started', file, table_label)
+
+        for llm in llms:
+            if len(llm_to_batched_paragraphs[llm.label]) > 0:
+                llm.reset()
+
+        prompt = make_annotation_prompt(
+            table = Cell.serialize_rows(
+                table.rows,
+                with_embeddings = False
+            )
+        )
+
+        for llm in llms:
+            if len(llm_to_batched_paragraphs[llm.label]) > 0:
+                completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
+                logger.debug('%s - Table %s - LLM "%s" response to the initialization message: "%s"', file, table_label, llm.label, completion)
+
+                batched_paragraphs = llm_to_batched_paragraphs[llm.label]
+                table_llm_annotations = []
+
+                n_generated_batches = len(batched_paragraphs)
+                batch_count = 0
+
+                for paragraphs_batch in batched_paragraphs:
+                    batch_count += 1
+                    logger.info('%s - Table %s - LLM %s - batch %d / %d', file, table_label, llm.label, batch_count, n_generated_batches)
+
+                    table_llm_annotations_batch = annotate_paragraphs(
+                        llm,
+                        paragraphs_batch,
+                        file,
+                        table_label
+                    )
+                    table_llm_annotations.extend(table_llm_annotations_batch)
+
+                    if ckpt_period is not None and batch_count % ckpt_period < 1:
+                        merged_table_annotations = merge_annotations(llm.label, table_llm_annotations, previous_table_annotations, previous_paragraph_ids)
+                        set_table_annotations(table.label, annotations, merged_table_annotations)
+                        previous_table_annotations = merged_table_annotations
+
+                        table_llm_annotations = []
+                        dict_to_json_file(annotations, output_filename)
+                        logger.info('%s - Table %s - LLM %s - batch %d / %d CHECKPOINT Saved to file %s', file, table_label, llm.label, batch_count, n_generated_batches, output_filename)
+
+                if len(table_llm_annotations) > 0:
+                    merged_table_annotations = merge_annotations(llm.label, table_llm_annotations, previous_table_annotations, previous_paragraph_ids)
+                    set_table_annotations(table.label, annotations, merged_table_annotations)
+                    previous_table_annotations = merged_table_annotations
+            else:
+                logger.debug('%s - Table %s - LLM "%s" Skip initialization because there are no data to handle', file, table_label, llm.label)
+                set_table_annotations(table.label, annotations, previous_table_annotations)
+
+        logger.info('%s - Table %s - Annotation completed in %.3f seconds', file, table_label, time() - start)
+
+    dict_to_json_file(annotations, output_filename)
+
+    logger.info('%s - Annotation completed in %.3f seconds, results saved as "%s"', file, time() - start_file, output_filename)
+
+
 class Annotator:
-    def __init__(self, llms: list[LLMClient]):
-        self.llms = llms
+    def __init__(self, llm_configs: list[dict], n_workers: int = 16):
+        self.llm_configs = llm_configs
+        self.workers = ThreadPoolExecutor(max_workers = n_workers)
 
     def annotate(
         self, input_path: str, output_path: str,
         batch_size: int = None, n_batches: int = None,
-        table_label_search_window: int = 20,
-        dry_run: bool = False, n_files: int = None, file_offset: int = 0, ckpt_period: int = None
+        table_label_search_window: int = 20, ckpt_period: int = None
     ):
         if not os_path.isdir(output_path):
             mkdir(output_path)
 
-        llms = self.llms
-
-        n_tables = 0
-        n_paragraphs = 0
-
-        files_counter = 0
-        if n_files is None:
-            files_total = 0
-
-            for root, _, files in walk(input_path):
-                for file in files:
-                    files_total += 1
-        else:
-            files_total = n_files
-
-        files_incomplete = 0
+        iterables = []
 
         for root, _, files in walk(input_path):
             for file in files:
-                files_counter += 1
-
-                if not file.endswith('.docx'):
-                    continue
-
-                if file_offset > 0:
-                    file_offset -= 1
-                    n_files -= 1
-                    continue
-
-                if n_files is not None:
-                    if n_files < 1:
-                        break
-
-                    n_files -= 1
-
-                start_file = time()
-
-                tables = []
-                paragraphs = []
-
-                annotations = {}
-                previous_annotations = None
-
-                form_count = 0
-                missing_label_count = 0
-
-                table_label_candidates = []
-                seen_labels = set()
-
-                elements = read_elements(os_path.join(root, file))
-
-                output_file = file[:-5] + '.json'
-                output_filename = os_path.join(output_path, output_file)
-
-                file = f'{file} [{files_counter} / {files_total}]'
-
-                previous_paragraph_ids = None
-
-                if os_path.isfile(output_filename):
-                    # logger.info('%s - File "%s" already exists. Moving forward', file, output_filename)
-                    # previous_annotations = dict_from_json_file(output_filename)
-                    previous_annotations = Annotations.from_file(output_filename)
-
-                    # previous_annotations_values = list(previous_annotations.values())  # synchronize existing paragraph ids and new paragraph ids
-
-                    logger.debug('Found %d tables in the previous annotation results', previous_annotations.n_tables)
-
-                    if previous_annotations.n_tables > 0:
-                        previous_paragraph_ids = list(previous_annotations.paragraph_ids)
-
-                if previous_paragraph_ids is None:
-                    previous_paragraph_ids = []
-
-                for element in elements:
-                    if element.tag.endswith('}p'):
-                        paragraph = Paragraph.from_xml(
-                            element,
-                            id_ = None if previous_paragraph_ids is None or len(paragraphs) >= len(previous_paragraph_ids) else previous_paragraph_ids[len(paragraphs)]
-                        )
-
-                        if paragraph:
-                            paragraphs.append(paragraph)
-                            table_label_candidates.append(paragraph.text)
-
-                            if len(paragraphs) > len(previous_paragraph_ids):
-                                previous_paragraph_ids.append(paragraph.id)
-
-                            n_paragraphs += 1
-                    else:
-                        if len(paragraphs) < 1:
-                            continue
-
-                        i = 0
-                        label = None
-
-                        table = Table.from_xml(element)
-                        seen_candidates = []
-
-                        if table.n_cols < 2 or table.n_rows < 2:
-                            continue
-
-                        while i < table_label_search_window:
-                            if len(table_label_candidates) > 0:
-                                title = table_label_candidates.pop().lower()
-                            else:
-                                break
-
-                            seen_candidates.append(title)
-
-                            i += 1
-
-                            match = TABLE_TITLE_PATTERN.match(title)
-
-                            if match is None:
-                                if title in EXCEPTIONAL_TABLE_LABELS:
-                                    label = title
-                            elif match.group(1) not in FORBIDDEN_TABLE_LABELS:
-                                label = match.group(1)
-
-                                if 'форма' in title:
-                                    label = f'форма {label}'
-
-                                if 'приложение' in title:
-                                    label = f'приложение {label}'
-
-                                break
-
-                        if label is None:  # Try to find the table header in the table itself
-                            for cell in table.cells:
-                                if cell is None:
-                                    continue
-
-                                title = cell.lower()
-                                match = TABLE_TITLE_PATTERN.match(title)
-
-                                if match is not None:
-                                    label = match.group(1)
-                                    break
-
-                        if is_part_of_form(seen_candidates):
-                            form_count += 1
-                            label = f'часть формы {form_count}'
-
-                        if label is None:  # Try to generate table name from seen candidates
-                            label = make_table_header(seen_candidates)
-                            logger.warning('%s - Had to generate table name "%s"', file, label)
-
-                        if label is None:
-                            missing_label_count += 1
-                            label = f'таблица без названия {missing_label_count}'
-
-                        label = label.replace('(справочное)', '')
-                        label = label.replace('(рекомендуемое)', '')
-
-                        while label in seen_labels:
-                            label = f'{label}_'
-
-                        seen_labels.add(label)
-
-                        annotations[label] = {
-                            'type': 'table',
-                            # 'paragraphs': []
-                            'paragraphs': previous_annotations.table_to_paragraphs.get(label, {'paragraphs': []})['paragraphs']
-                        }
-                        table.label = label
-                        logger.debug('%s - Found table %s - %d x %d', file, label, table.n_rows, table.n_cols)
-                        logger.debug('%s - Table %s - %d x %d Content: %s', file, label, table.n_rows, table.n_cols, ', '.join(f'"{cell}"' for cell in table.cells))
-
-                        table_label_candidates = []
-
-                        tables.append(table)
-
-                        n_tables += 1
-
-                previous_annotations_is_complete = None
-
-                logger.info(
-                    '%s - Found %d tables and %d paragraphs%s',
-                    file,
-                    len(tables),
-                    len(paragraphs),
-                    '' if not dry_run else '. Annotation is complete 🟢' if (
-                        previous_annotations_is_complete := previous_annotations.is_complete(len(tables), len(paragraphs))
-                    ) else '. Annotation is incomplete 🔴'
+                iterables.append(
+                    (
+                        self.llm_configs,
+                        root,
+                        file,
+                        output_path,
+                        batch_size,
+                        n_batches,
+                        table_label_search_window,
+                        ckpt_period
+                    )
                 )
 
-                if previous_annotations_is_complete is False:
-                    files_incomplete += 1
-
-                tables_counter = 0
-                tables_total = len(tables)
-
-                if dry_run:
-                    continue
-
-                for table in tables:
-                    tables_counter += 1
-
-                    if table.label is None or table.label not in annotations:
-                        logger.warning('Missing table %s in annotations list', table.label)
-                        continue
-
-                    start = time()
-
-                    llm_to_batched_paragraphs = generate_batches(
-                        paragraphs,
-                        batch_size,
-                        self.llms,
-                        n_batches,
-                        previous_table_annotations := get_previous_table_annotations(table.label, previous_annotations.table_to_paragraphs)
-                    )
-
-                    table_label = f'{table.label} [{tables_counter} / {tables_total}]'
-
-                    logger.debug('%s - Table %s - Annotation started', file, table_label)
-
-                    for llm in llms:
-                        if len(llm_to_batched_paragraphs[llm.label]) > 0:
-                            llm.reset()
-
-                    prompt = make_annotation_prompt(
-                        table = Cell.serialize_rows(
-                            table.rows,
-                            with_embeddings = False
-                        )
-                    )
-
-                    for llm in llms:
-                        if len(llm_to_batched_paragraphs[llm.label]) > 0:
-                            completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
-                            logger.debug('%s - Table %s - LLM "%s" response to the initialization message: "%s"', file, table_label, llm.label, completion)
-
-                            batched_paragraphs = llm_to_batched_paragraphs[llm.label]
-                            table_llm_annotations = []
-
-                            n_generated_batches = len(batched_paragraphs)
-                            batch_count = 0
-
-                            for paragraphs_batch in batched_paragraphs:
-                                batch_count += 1
-                                logger.info('%s - Table %s - LLM %s - batch %d / %d', file, table_label, llm.label, batch_count, n_generated_batches)
-
-                                table_llm_annotations_batch = annotate_paragraphs(
-                                    llm,
-                                    paragraphs_batch,
-                                    file,
-                                    table_label
-                                )
-                                table_llm_annotations.extend(table_llm_annotations_batch)
-
-                                if ckpt_period is not None and batch_count % ckpt_period < 1:
-                                    merged_table_annotations = merge_annotations(llm.label, table_llm_annotations, previous_table_annotations, previous_paragraph_ids)
-                                    set_table_annotations(table.label, annotations, merged_table_annotations)
-                                    previous_table_annotations = merged_table_annotations
-
-                                    table_llm_annotations = []
-                                    dict_to_json_file(annotations, output_filename)
-                                    logger.info('%s - Table %s - LLM %s - batch %d / %d CHECKPOINT Saved to file %s', file, table_label, llm.label, batch_count, n_generated_batches, output_filename)
-
-                            if len(table_llm_annotations) > 0:
-                                merged_table_annotations = merge_annotations(llm.label, table_llm_annotations, previous_table_annotations, previous_paragraph_ids)
-                                set_table_annotations(table.label, annotations, merged_table_annotations)
-                                previous_table_annotations = merged_table_annotations
-                        else:
-                            logger.debug('%s - Table %s - LLM "%s" Skip initialization because there are no data to handle', file, table_label, llm.label)
-                            set_table_annotations(table.label, annotations, previous_table_annotations)
-
-                    logger.info('%s - Table %s - Annotation completed in %.3f seconds', file, table_label, time() - start)
-
-                dict_to_json_file(annotations, output_filename)
-
-                logger.info('%s - Annotation completed in %.3f seconds, results saved as "%s"', file, time() - start_file, output_filename)
-
-        logger.info('Found %d tables and %d paragraphs, %d / %d documents are incomplete', n_tables, n_paragraphs, files_incomplete, files_total)
+        self.workers.map(handle_file, iterables)
