@@ -582,5 +582,5 @@ class Annotator:
                     )
                 )
 
-        handle_file(iterables[0])
-        # self.workers.map(handle_file, iterables)
+        # handle_file(iterables[0])
+        self.workers.map(handle_file, iterables)
