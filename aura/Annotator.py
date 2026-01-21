@@ -15,8 +15,8 @@ from .Annotations import Annotations
 
 
 logger = getLogger(__name__)
-# logger.setLevel(DEBUG)
-logger.setLevel(INFO)
+logger.setLevel(DEBUG)
+# logger.setLevel(INFO)
 
 
 TABLE_TITLE_PATTERN = re.compile(r'(?:таблица|форма|приложение)\s+([^ ]+)')
@@ -413,7 +413,7 @@ def handle_file(args):
             annotations[label] = {
                 'type': 'table',
                 # 'paragraphs': []
-                'paragraphs': previous_annotations.table_to_paragraphs.get(label, {'paragraphs': []})['paragraphs']
+                'paragraphs': [] if previous_annotations is None else previous_annotations.table_to_paragraphs.get(label, {'paragraphs': []})['paragraphs']
             }
             table.label = label
             logger.debug('%s - Found table %s - %d x %d', file, label, table.n_rows, table.n_cols)
@@ -447,7 +447,7 @@ def handle_file(args):
             batch_size,
             llms,
             n_batches,
-            previous_table_annotations := get_previous_table_annotations(table.label, previous_annotations.table_to_paragraphs)
+            previous_table_annotations := get_previous_table_annotations(table.label, None if previous_annotations is None else previous_annotations.table_to_paragraphs)
         )
 
         table_label = f'{table.label} [{tables_counter} / {tables_total}]'
@@ -467,7 +467,47 @@ def handle_file(args):
 
         for llm in llms:
             if len(llm_to_batched_paragraphs[llm.label]) > 0:
-                completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
+                try:
+                    completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
+                except ValueError:
+                    logger.warning('%s - Failed the first attempt of parsing table %s', file, table_label)
+
+                    llm.reset()
+
+                    prompt = make_annotation_prompt(
+                        table = Cell.serialize_rows(
+                            table.rows,
+                            with_embeddings = False
+                        ),
+                        squeeze_rows = True,
+                        squeeze_cols = True
+                    )
+
+                    try:
+                        completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
+                    except ValueError:
+                        logger.error('%s - Too many tokens in table %s', file, table_label)
+                        raise
+
+                    # try:
+                    #     completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
+                    # except ValueError:
+                    #     prompt = make_annotation_prompt(
+                    #         table = Cell.serialize_rows(
+                    #             table.rows,
+                    #             with_embeddings = False
+                    #         ),
+                    #         squeeze_rows = True,
+                    #         squeeze_cols = True
+                    #     )
+
+                    #     try:
+                    #         print(prompt)
+                    #         completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
+                    #     except ValueError:
+                    #         logger.error('%s - Too many tokens in table %s', file, table_label)
+                    #         raise
+
                 logger.debug('%s - Table %s - LLM "%s" response to the initialization message: "%s"', file, table_label, llm.label, completion)
 
                 batched_paragraphs = llm_to_batched_paragraphs[llm.label]
@@ -542,4 +582,5 @@ class Annotator:
                     )
                 )
 
-        self.workers.map(handle_file, iterables)
+        handle_file(iterables[0])
+        # self.workers.map(handle_file, iterables)

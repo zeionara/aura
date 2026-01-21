@@ -33,10 +33,6 @@ class VllmClient(LLMClient):
                 'content': prompt
             }
 
-            if add_to_history:
-                history.append(system_message)
-                history.append(init_message)
-
             response = post(
                 self.url,
                 json = {
@@ -48,6 +44,10 @@ class VllmClient(LLMClient):
                 },
                 timeout = TIMEOUT
             )
+
+            if add_to_history:
+                history.append(system_message)
+                history.append(init_message)
         else:
             next_message = {
                 'role': 'user',
