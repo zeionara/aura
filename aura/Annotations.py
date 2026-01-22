@@ -6,8 +6,8 @@ from .util import dict_from_json_file
 
 
 logger = getLogger(__name__)
-# logger.setLevel(DEBUG)
-logger.setLevel(INFO)
+logger.setLevel(DEBUG)
+# logger.setLevel(INFO)
 
 
 class Annotations:

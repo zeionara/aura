@@ -11,8 +11,8 @@ from .Annotations import Annotations
 
 
 logger = getLogger(__name__)
-# logger.setLevel(DEBUG)
-logger.setLevel(INFO)
+logger.setLevel(DEBUG)
+# logger.setLevel(INFO)
 
 
 TABLE_TITLE_PATTERN = re.compile(r'(?:таблица|форма|приложение)\s+([^ ]+)')
