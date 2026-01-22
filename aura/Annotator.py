@@ -448,7 +448,7 @@ class Annotator:
                         annotations[label] = {
                             'type': 'table',
                             # 'paragraphs': []
-                            'paragraphs': previous_annotations.table_to_paragraphs.get(label, {'paragraphs': []})['paragraphs']
+                            'paragraphs': [] if previous_annotations is None else previous_annotations.table_to_paragraphs.get(label, {'paragraphs': []})['paragraphs']
                         }
                         table.label = label
                         logger.debug('%s - Found table %s - %d x %d', file, label, table.n_rows, table.n_cols)
@@ -468,7 +468,9 @@ class Annotator:
                     len(tables),
                     len(paragraphs),
                     '' if not dry_run else '. Annotation is complete 🟢' if (
-                        previous_annotations_is_complete := previous_annotations.is_complete(len(tables), len(paragraphs))
+                        previous_annotations_is_complete := (
+                            False if previous_annotations is None else previous_annotations.is_complete(len(tables), len(paragraphs))
+                        )
                     ) else '. Annotation is incomplete 🔴'
                 )
 
@@ -495,7 +497,7 @@ class Annotator:
                         batch_size,
                         self.llms,
                         n_batches,
-                        previous_table_annotations := get_previous_table_annotations(table.label, previous_annotations.table_to_paragraphs)
+                        previous_table_annotations := get_previous_table_annotations(table.label, None if previous_annotations is None else previous_annotations.table_to_paragraphs)
                     )
 
                     table_label = f'{table.label} [{tables_counter} / {tables_total}]'
