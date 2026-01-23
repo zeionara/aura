@@ -10,7 +10,7 @@ from .Cell import Cell
 from .Comment import Comment
 
 from .util import get_aligned_cell
-from ..util.string import normalize_spaces, drop_space_around_punctuation
+from ..util.string import normalize_spaces, normalize_underscores, drop_space_around_punctuation
 from ..util.xml import WORD_NAMESPACE, should_merge_vertically, get_horizontal_span_size, get_text  # , get_xml
 
 
@@ -62,8 +62,10 @@ class Table(ReferentiableObject, Item):
                     cells.append(
                         Cell(
                             drop_space_around_punctuation(
-                                normalize_spaces(
-                                    get_text(cell)
+                                normalize_underscores(
+                                    normalize_spaces(
+                                        get_text(cell)
+                                    )
                                 )
                             ),
                             n_cols = n_cols

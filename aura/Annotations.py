@@ -1,13 +1,11 @@
 from os import path as os_path
 
-from logging import getLogger, DEBUG, INFO
+from logging import getLogger
 
 from .util import dict_from_json_file
 
 
 logger = getLogger(__name__)
-# logger.setLevel(DEBUG)
-logger.setLevel(INFO)
 
 
 class Annotations:

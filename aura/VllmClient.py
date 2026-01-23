@@ -1,6 +1,11 @@
+from json import dumps
 from requests import post
+from logging import getLogger
 
 from .LLMClient import LLMClient, TIMEOUT
+
+
+logger = getLogger(__name__)
 
 
 class VllmClient(LLMClient):
@@ -77,4 +82,6 @@ class VllmClient(LLMClient):
 
             return response_message['content']
 
-        raise ValueError(f'Unexpected response: {response.text}')
+        logger.error('Unexpected response to messages:\n%s\n', dumps(history, indent = 2, ensure_ascii = False))
+
+        raise ValueError(f'Unexpected response from model {self.label} ({self.model}): {response.text}')

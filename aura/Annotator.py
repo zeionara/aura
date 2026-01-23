@@ -2,21 +2,18 @@ import re
 from time import time
 from string import punctuation
 from os import path as os_path, mkdir, walk
-from logging import getLogger, INFO, ERROR, WARNING, DEBUG
+from logging import getLogger
 from concurrent.futures import ThreadPoolExecutor
 from threading import get_ident
-from time import sleep
 
 from .LLMClient import LLMClient
 from .VllmClient import VllmClient
-from .util import make_annotation_prompt, read_elements, dict_to_string, string_to_dict, dict_to_json_file, normalize_spaces, dict_from_json_file
+from .util import make_annotation_prompt, read_elements, dict_to_string, string_to_dict, dict_to_json_file, normalize_spaces
 from .document import Paragraph, Cell, Table
 from .Annotations import Annotations
 
 
 logger = getLogger(__name__)
-logger.setLevel(DEBUG)
-# logger.setLevel(INFO)
 
 
 TABLE_TITLE_PATTERN = re.compile(r'(?:таблица|форма|приложение)\s+([^ ]+)')
@@ -216,6 +213,8 @@ def annotate_paragraphs(llm: LLMClient, paragraphs: list[Paragraph], file: str, 
         logger.debug('%s - Table %s - LLM "%s" response to the list of paragraphs: "%s"', file, table, llm.label, completion)
 
         paragraph_scores = string_to_dict(completion)
+
+        logger.debug('%s - Table %s - Paragraph scores: "%s"', file, table, str(paragraph_scores))
 
         for paragraph in paragraphs:
             if paragraph.id not in ids_to_annotate:
@@ -454,24 +453,16 @@ def handle_file(args):
 
         logger.debug('%s - Table %s - Annotation started', file, table_label)
 
-        for llm in llms:
-            if len(llm_to_batched_paragraphs[llm.label]) > 0:
-                llm.reset()
-
-        prompt = make_annotation_prompt(
-            table = Cell.serialize_rows(
-                table.rows,
-                with_embeddings = False
-            )
-        )
+        # for llm in llms:
+        #     if len(llm_to_batched_paragraphs[llm.label]) > 0:
+        #         llm.reset()
 
         for llm in llms:
             if len(llm_to_batched_paragraphs[llm.label]) > 0:
-                try:
-                    completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
-                except ValueError:
-                    logger.warning('%s - Failed the first attempt of parsing table %s', file, table_label)
+                squeezed = False
+                n_attempts = 2
 
+                while n_attempts > 0:
                     llm.reset()
 
                     prompt = make_annotation_prompt(
@@ -479,71 +470,107 @@ def handle_file(args):
                             table.rows,
                             with_embeddings = False
                         ),
-                        squeeze_rows = True,
-                        squeeze_cols = True
+                        squeeze_rows = squeezed,
+                        squeeze_cols = squeezed
                     )
 
                     try:
                         completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
-                    except ValueError:
-                        logger.error('%s - Too many tokens in table %s', file, table_label)
-                        raise
+                    except ValueError as e:
+                        if squeezed:
+                            raise ValueError(f'Failed to process squeezed table {table_label}') from e
 
-                    # try:
-                    #     completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
-                    # except ValueError:
-                    #     prompt = make_annotation_prompt(
-                    #         table = Cell.serialize_rows(
-                    #             table.rows,
-                    #             with_embeddings = False
-                    #         ),
-                    #         squeeze_rows = True,
-                    #         squeeze_cols = True
-                    #     )
+                        logger.warning('%s - Failed the first attempt of parsing table %s', file, table_label)
 
-                    #     try:
-                    #         print(prompt)
-                    #         completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
-                    #     except ValueError:
-                    #         logger.error('%s - Too many tokens in table %s', file, table_label)
-                    #         raise
+                        llm.reset()
 
-                logger.debug('%s - Table %s - LLM "%s" response to the initialization message: "%s"', file, table_label, llm.label, completion)
+                        prompt = make_annotation_prompt(
+                            table = Cell.serialize_rows(
+                                table.rows,
+                                with_embeddings = False
+                            ),
+                            squeeze_rows = True,
+                            squeeze_cols = True
+                        )
+                        squeezed = True
 
-                batched_paragraphs = llm_to_batched_paragraphs[llm.label]
-                table_llm_annotations = []
+                        try:
+                            completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
+                        except ValueError:
+                            logger.error('%s - Too many tokens in table %s', file, table_label)
+                            raise
 
-                n_generated_batches = len(batched_paragraphs)
-                batch_count = 0
+                        # try:
+                        #     completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
+                        # except ValueError:
+                        #     prompt = make_annotation_prompt(
+                        #         table = Cell.serialize_rows(
+                        #             table.rows,
+                        #             with_embeddings = False
+                        #         ),
+                        #         squeeze_rows = True,
+                        #         squeeze_cols = True
+                        #     )
 
-                for paragraphs_batch in batched_paragraphs:
-                    batch_count += 1
-                    logger.info('%s - Table %s - LLM %s - batch %d / %d', file, table_label, llm.label, batch_count, n_generated_batches)
+                        #     try:
+                        #         print(prompt)
+                        #         completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
+                        #     except ValueError:
+                        #         logger.error('%s - Too many tokens in table %s', file, table_label)
+                        #         raise
 
-                    table_llm_annotations_batch = annotate_paragraphs(
-                        llm,
-                        paragraphs_batch,
-                        file,
-                        table_label
-                    )
-                    table_llm_annotations.extend(table_llm_annotations_batch)
+                    logger.debug('%s - Table %s - LLM "%s" response to the initialization message: "%s"', file, table_label, llm.label, completion)
 
-                    if ckpt_period is not None and batch_count % ckpt_period < 1:
+                    batched_paragraphs = llm_to_batched_paragraphs[llm.label]
+                    table_llm_annotations = []
+
+                    n_generated_batches = len(batched_paragraphs)
+                    batch_count = 0
+
+                    paragraph_annotation_exception = None
+
+                    for paragraphs_batch in batched_paragraphs:
+                        batch_count += 1
+                        logger.info('%s - Table %s - LLM %s - batch %d / %d', file, table_label, llm.label, batch_count, n_generated_batches)
+
+                        try:
+                            table_llm_annotations_batch = annotate_paragraphs(
+                                llm,
+                                paragraphs_batch,
+                                file,
+                                table_label
+                            )
+                        except ValueError as e:
+                            logger.warning('%s - Table %s - Failed to annotate paragraphs', file, table_label)
+                            paragraph_annotation_exception = e
+                            break
+
+                        table_llm_annotations.extend(table_llm_annotations_batch)
+
+                        if ckpt_period is not None and batch_count % ckpt_period < 1:
+                            merged_table_annotations = merge_annotations(llm.label, table_llm_annotations, previous_table_annotations, previous_paragraph_ids)
+                            set_table_annotations(table.label, annotations, merged_table_annotations)
+                            previous_table_annotations = merged_table_annotations
+
+                            table_llm_annotations = []
+                            dict_to_json_file(annotations, output_filename)
+                            logger.info('%s - Table %s - LLM %s - batch %d / %d CHECKPOINT Saved to file %s', file, table_label, llm.label, batch_count, n_generated_batches, output_filename)
+
+                    if paragraph_annotation_exception is not None:
+                        if squeezed:
+                            raise ValueError(f'Failed to process squeezed table {table_label}') from paragraph_annotation_exception
+
+                        squeezed = True
+                        n_attempts -= 1
+                        continue
+
+                    if len(table_llm_annotations) > 0:
                         merged_table_annotations = merge_annotations(llm.label, table_llm_annotations, previous_table_annotations, previous_paragraph_ids)
                         set_table_annotations(table.label, annotations, merged_table_annotations)
                         previous_table_annotations = merged_table_annotations
-
-                        table_llm_annotations = []
-                        dict_to_json_file(annotations, output_filename)
-                        logger.info('%s - Table %s - LLM %s - batch %d / %d CHECKPOINT Saved to file %s', file, table_label, llm.label, batch_count, n_generated_batches, output_filename)
-
-                if len(table_llm_annotations) > 0:
-                    merged_table_annotations = merge_annotations(llm.label, table_llm_annotations, previous_table_annotations, previous_paragraph_ids)
-                    set_table_annotations(table.label, annotations, merged_table_annotations)
-                    previous_table_annotations = merged_table_annotations
-            else:
-                logger.debug('%s - Table %s - LLM "%s" Skip initialization because there are no data to handle', file, table_label, llm.label)
-                set_table_annotations(table.label, annotations, previous_table_annotations)
+                else:
+                    logger.debug('%s - Table %s - LLM "%s" Skip initialization because there are no data to handle', file, table_label, llm.label)
+                    set_table_annotations(table.label, annotations, previous_table_annotations)
 
         logger.info('%s - Table %s - Annotation completed in %.3f seconds', file, table_label, time() - start)
 
@@ -582,6 +609,6 @@ class Annotator:
                     )
                 )
 
-        # for iterable in iterables:
-        #     handle_file(iterable)
-        self.workers.map(handle_file, iterables)
+        for iterable in iterables:
+            handle_file(iterable)
+        # self.workers.map(handle_file, iterables)

@@ -3,6 +3,7 @@ from json import dumps, JSONDecoder
 from json.decoder import JSONDecodeError
 
 
+UNDERSCORE = re.compile(r'_+')
 SPACE = re.compile(r'\s+')
 SPACE_CHAR = re.compile(r' +')
 
@@ -25,7 +26,7 @@ def string_to_dict(data: str):
     idx = 0
 
     while idx < len(data):
-        idx = data.find('{')
+        idx = data.find('{', idx)
 
         if idx == -1:
             break
@@ -43,8 +44,12 @@ def normalize_spaces(string: str):
     return SPACE.sub(' ', string).strip()
 
 
+def normalize_underscores(string: str):
+    return UNDERSCORE.sub('_', string).strip()
+
+
 def reduce_spaces(string: str):
-    return SPACE_CHAR.sub(' ', string).strip()
+    return SPACE_CHAR.sub(' ', string)
 
 
 def drop_space_around_punctuation(string: str):

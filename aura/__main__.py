@@ -2,22 +2,20 @@ from os import walk, path as os_path, mkdir, getenv
 from pathlib import Path
 from queue import Queue
 from json import dump, load
-from logging import getLogger, StreamHandler, INFO, DEBUG, Formatter
+from logging import getLogger
 from random import seed as random_seed
 from torch import optim
 
-from click import group, argument, option, Choice
+from click import group, argument, option
 
-from .util import get_comments, get_elements, get_xml, get_text, read_elements, normalize_spaces, make_annotation_prompt, make_system_prompt, dict_from_json_file  # , get_paragraph_style
-from .document import Paragraph, Table, Document, INDENT, Cell, ZipFile
+from .util import get_comments, get_elements, get_xml, read_elements, make_system_prompt, dict_from_json_file
+from .document import Paragraph, Table, Document, INDENT
 from .document.ZipFile import ZipFile
 from .embedder import EmbedderType, BaseModel, FlatEmbedder, StructuredEmbedder
 from .evaluation import evaluate as run_evaluation, average
 from .Stats import Stats
 from .Subset import Subset
 from .embedder.AttentionTableEmbedder import DEFAULT_INPUT_DIM
-from .VllmClient import VllmClient
-from .GigaChatClient import GigaChatClient, GigaChatModel
 from .Annotator import Annotator, TABLE_TITLE_PATTERN
 
 
@@ -31,16 +29,6 @@ MODEL_PARAMS_PATH = None  # 'assets/weights.pth'
 
 DEFAULT_TRAIN_FRACTION = 0.6
 DEFAULT_SEED = 17
-
-root = getLogger()
-
-handler = StreamHandler()
-handler.setLevel(DEBUG)
-
-formatter = Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-
-root.addHandler(handler)
 
 
 logger = getLogger(__name__)
