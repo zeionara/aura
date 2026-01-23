@@ -568,6 +568,8 @@ def handle_file(args):
                         merged_table_annotations = merge_annotations(llm.label, table_llm_annotations, previous_table_annotations, previous_paragraph_ids)
                         set_table_annotations(table.label, annotations, merged_table_annotations)
                         previous_table_annotations = merged_table_annotations
+
+                    break
                 else:
                     logger.debug('%s - Table %s - LLM "%s" Skip initialization because there are no data to handle', file, table_label, llm.label)
                     set_table_annotations(table.label, annotations, previous_table_annotations)
