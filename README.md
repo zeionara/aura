@@ -64,15 +64,17 @@ The script supports extending previously generated annotations located in the ta
 
 The full dataset contains **420** files. This dataset was split into parts, and the following versions were generated:
 
-| Dataset ID | Source | Annotations | Description |
-| --- | --- | --- | --- |
-| `sets-of-rules` | Yes | No | Contains **117** documents which made up the first large batch passed to `mistralai/Mistral-Small-3.2-24B-Instruct-2506` |
-| `2025.11.07.02` | No | Yes | Includes annotations for **119** files with the lowest size from the original dataset. This dataset is corrupted, because it contains annotations from multiple `source` datasets (`sets-of-rules`, `2026.01.22.01`, `2026.02.01.01`, and the full dataset) |
-| `2026.01.22.01` | Yes | Yes | Contains **9** documents excluded from `sets-of-rules` due to the table size, which resulted in the prompt containing too much text (this problem was solved by deleting empty cells from large tables) |
-| `2026.01.24.01` | Yes | Yes | The improved version of `2025.11.07.02`, which consists of **117** documents and includes only files, from which there is a source in `sets-of-rules` |
-| `2026.01.24.02` | Yes | Yes | Contains **80** documents which made up the second large batched passed to `mistralai/Mistral-Small-3.2-24B-Instruct-2506` |
-| `2026.02.01.01` | Yes | Yes | Contains **8** documents, which were originally excluded from the `sets-of-rules` due to unconventional table naming patterns |
-| `2026.02.01.02` | Yes | Yes | Contains **197** documents, which result from merging `2026.01.24.01` and `2026.01.24.02` |
+| Dataset ID | Source | Annotations | Manual | Description |
+| --- | --- | --- | --- | --- |
+| `2025.11.07.02` | Yes | No | Yes | Contains **7** documents annotated manually |
+| `sets-of-rules` | Yes | No | No | Contains **108** documents which made up the first large batch passed to `mistralai/Mistral-Small-3.2-24B-Instruct-2506` |
+| `2025.11.07.02` | No | Yes | No | Includes annotations for **119** files with the lowest size from the original dataset. This dataset is corrupted, because it contains annotations from multiple `source` datasets (`sets-of-rules`, `2026.01.22.01`, `2026.02.01.01`, and the full dataset) |
+| `2026.01.22.01` | Yes | Yes | No | Contains **9** documents excluded from `sets-of-rules` due to the table size, which resulted in the prompt containing too much text (this problem was solved by deleting empty cells from large tables) |
+| `2026.01.24.01` | Yes | Yes | No | The improved version of `2025.11.07.02`, which consists of **117** documents (`sets-of-rules` + `2026.01.22.01`) and includes only files, from which there is a source in `sets-of-rules` |
+| `2026.01.24.02` | Yes | Yes | No | Contains **80** documents which made up the second large batched passed to `mistralai/Mistral-Small-3.2-24B-Instruct-2506` |
+| `2026.02.01.01` | Yes | Yes | No | Contains **8** documents, which were originally excluded from the `sets-of-rules` due to unconventional table naming patterns |
+| `2026.02.01.02` | Yes | Yes | No | Contains **197** documents, which result from merging `2026.01.24.01` and `2026.01.24.02` |
+| `2026.02.01.03` | Yes | Yes | No | Contains the remaining **210** documents from the full dataset |
 
 ### Applying annotations
 
