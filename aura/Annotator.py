@@ -611,6 +611,6 @@ class Annotator:
                     )
                 )
 
-        for iterable in iterables:
-            handle_file(iterable)
-        # self.workers.map(handle_file, iterables)
+        # for iterable in iterables:
+        #     handle_file(iterable)
+        self.workers.map(handle_file, iterables)
