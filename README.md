@@ -60,6 +60,20 @@ The command will generate a set of `.json` files in the target directory, each o
 
 The script supports extending previously generated annotations located in the target folder. If required score is already provided, then it will not be calculated again.
 
+### Dataset versions
+
+The full dataset contains **420** files. This dataset was split into parts, and the following versions were generated:
+
+| Dataset ID | Source | Annotations | Description |
+| --- | --- | --- | --- |
+| `sets-of-rules` | Yes | No | Contains **117** documents which made up the first large batch passed to `mistralai/Mistral-Small-3.2-24B-Instruct-2506` |
+| `2025.11.07.02` | No | Yes | Includes annotations for **119** files with the lowest size from the original dataset. This dataset is corrupted, because it contains annotations from multiple `source` datasets (`sets-of-rules`, `2026.01.22.01`, `2026.02.01.01`, and the full dataset) |
+| `2026.01.22.01` | Yes | Yes | Contains **9** documents excluded from `sets-of-rules` due to the table size, which resulted in the prompt containing too much text (this problem was solved by deleting empty cells from large tables) |
+| `2026.01.24.01` | Yes | Yes | The improved version of `2025.11.07.02`, which consists of **117** documents and includes only files, from which there is a source in `sets-of-rules` |
+| `2026.01.24.02` | Yes | Yes | Contains **80** documents which made up the second large batched passed to `mistralai/Mistral-Small-3.2-24B-Instruct-2506` |
+| `2026.02.01.01` | Yes | Yes | Contains **8** documents, which were originally excluded from the `sets-of-rules` due to unconventional table naming patterns |
+| `2026.02.01.02` | Yes | Yes | Contains **197** documents, which result from merging `2026.01.24.01` and `2026.01.24.02` |
+
 ### Applying annotations
 
 Then apply these annotations:
