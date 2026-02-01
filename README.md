@@ -168,6 +168,54 @@ The full dataset contains **420** files. This dataset was split into parts, and 
 | `2026.02.01.02` | Yes | Yes | No | Contains **197** documents, which result from merging `2026.01.24.01` and `2026.01.24.02` |
 | `2026.02.01.03` | Yes | Yes | No | Contains the remaining **210** documents from the full dataset |
 
+### The automatic workflow
+
+If you have a collection of `.docx` documents with tables that you'd like to annotate, here is a sequence of commands that you would apply. Suppose the documents are placed in the folder `assets/data/default/source`, then first, generate paragraph annotations using LLM:
+
+```sh
+python -m aura annotate assets/data/default/source assets/data/default/annotations --batch-size 10
+```
+
+Then convert them to format for vectorization:
+
+```sh
+python -m aura prepare assets/data/default/source assets/data/default/prepared assets/data/default/annotations
+```
+
+Then vectorize paragraph and cell content using baseline (`flat`) model:
+
+```sh
+python -m aura embed assets/data/default/prepared assets/data/default/prepared -a flat -m DeepPavlov/rubert-base-cased -d 768
+```
+
+Train a custom `structured` embedding model:
+
+```sh
+python -m aura train assets/data/default/prepared assets/data/default/models/rubert-base-cased.pth -m DeepPavlov/rubert-base-cased -d 768
+```
+
+Vectorize paragraph and cell content using this model:
+
+```sh
+python -m aura embed assets/data/default/prepared assets/data/default/prepared -p assets/data/default/models/rubert-base-cased.pth -a structured -m DeepPavlov/rubert-base-cased -d 768
+```
+
+Run evaluation:
+
+```sh
+python -m aura evaluate assets/data/default/prepared assets/data/default/evaluation.tsv
+```
+
+Evaluation report example:
+
+```tsv
+Evaluation Metric		MAP	MAP	MAP	MIR	MIR	MIR	MRR	MRR	MRR	NDCG	NDCG	NDCG
+Distance Metric		cosine	dot	euclidean	cosine	dot	euclidean	cosine	dot	euclidean	cosine	dot	euclidean
+Model	Embedding Type												
+DeepPavlov/rubert-base-cased	flat	0.0845877826953202	0.0845877826953202	0.0845877826953202	117.67473029528017	117.67473029528017	117.67473029528017	0.2008121683699713	0.2008121683699713	0.2008121683699713	0.28569194950377585	0.28569194950377585	0.28569194950377585
+DeepPavlov/rubert-base-cased	structured	0.07871600120728524	0.07871600120728524	0.07871600120728524	109.79742850236273	109.79742850236273	109.79742850236273	0.13280532764675196	0.13280532764675196	0.13280532764675196	0.29119709817162154	0.29119709817162154	0.29119709817162154
+```
+
 ### Applying annotations
 
 Then apply these annotations:
