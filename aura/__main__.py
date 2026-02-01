@@ -1,22 +1,19 @@
 from os import walk, path as os_path, mkdir, getenv
-from pathlib import Path
-from queue import Queue
 from json import dump, load
 from logging import getLogger
-from random import seed as random_seed
 from torch import optim
 
 from click import group, argument, option
 
-from .util import get_comments, get_elements, get_xml, read_elements, make_system_prompt, dict_from_json_file
-from .document import Paragraph, Table, Document, INDENT
+from .util import read_elements, make_system_prompt, dict_from_json_file
+from .document import Paragraph, Table, INDENT
 from .document.ZipFile import ZipFile
 from .embedder import EmbedderType, BaseModel, FlatEmbedder, StructuredEmbedder
 from .evaluation import evaluate as run_evaluation, average
-from .Stats import Stats
-from .Subset import Subset
 from .embedder.AttentionTableEmbedder import DEFAULT_INPUT_DIM
 from .Annotator import Annotator, TABLE_TITLE_PATTERN
+
+from .prepare import prepare as prepare_impl
 
 
 RAW_DATA_PATH = 'assets/data/raw'
@@ -283,107 +280,7 @@ def embed(input_path: str, output_path: str, model_path: str, architecture: Embe
 @option('--train-fraction', '-t', type = float, default = DEFAULT_TRAIN_FRACTION)
 @option('--seed', '-s', type = int, default = DEFAULT_SEED)
 def prepare(input_path: str, output_path: str, train_fraction: float, seed: int):
-    random_seed(seed)
-
-    for root, _, files in walk(input_path):
-        for file in files:
-
-            path = os_path.join(root, file)
-
-            output_file = os_path.join(output_path, f'{Path(file).stem}.json')
-
-            if not os_path.isdir(output_path):
-                mkdir(output_path)
-
-            comments, content = get_comments(path)
-            elements = get_elements(content, comments)
-
-            records = []
-
-            label_to_paragraph_ids = {}
-            paragraph_id_to_xml = {}
-            paragraph_id_to_element = {}
-
-            paragraphs = Queue()
-
-            # 1. Handle paragraph comments, group by target (table) id
-
-            for element, comments in elements:
-                if element.tag.endswith('}p'):
-
-                    # style = get_paragraph_style(element)
-
-                    # if style is None:
-                    #     print(get_xml(element))
-
-                    paragraph = Paragraph.from_xml(element, comments)
-                    paragraphs.put(paragraph)
-
-                    if paragraph:
-                        if comments is not None:
-                            paragraph.subset = Subset.random(train_fraction)
-                            for comment in comments:
-                                if (label := comment.body.target) is not None:
-                                    if (paragraph_ids := label_to_paragraph_ids.get(comment.body.target)) is None:
-                                        label_to_paragraph_ids[label] = [(paragraph.id, comment.body.score)]
-                                    else:
-                                        paragraph_ids.append((paragraph.id, comment.body.score))
-
-                                    paragraph_id_to_xml[paragraph.id] = get_xml(element)
-                                    paragraph_id_to_element[paragraph.id] = element
-
-            # 2. Handle table comments, extract linked paragraphs
-
-            for element, comments in elements:
-                if element.tag.endswith('}p'):
-                    paragraph = paragraphs.get()
-
-                    if paragraph:
-                        records.append(paragraph.json)
-                else:
-                    label = None
-
-                    if comments is not None:
-                        for comment in comments:
-                            if comment.body.id is not None:
-                                label = comment.body.id
-
-                    context = None
-
-                    if label in label_to_paragraph_ids:
-                        table_paragraphs = []
-
-                        for paragraph, score in sorted(label_to_paragraph_ids.get(label), key = lambda entry: entry[1], reverse = True):
-                            if context is None:
-                                context = {paragraph: score}
-                            else:
-                                context[paragraph] = score
-
-                            xml = paragraph_id_to_xml.get(paragraph)
-
-                            if xml is None:
-                                logger.warning('Missing xml for paragraph %s', paragraph)
-                            else:
-                                table_paragraphs.append(paragraph_id_to_element[paragraph])
-
-                    elif label is not None:
-                        logger.warning('Table %s is missing annotations', label)
-
-                    table = Table.from_xml(
-                        element,
-                        label,
-                        comments,
-                        context
-                    )
-
-                    records.append(table.json)
-
-            with open(output_file, 'w', encoding = 'utf-8') as file:
-                dump(
-                    {
-                        'elements': records
-                    }, file, indent = INDENT, ensure_ascii = False
-                )
+    prepare_impl(input_path, output_path, train_fraction, seed)
 
 
 if __name__ == '__main__':
