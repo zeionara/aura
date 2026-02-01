@@ -277,10 +277,11 @@ def embed(input_path: str, output_path: str, model_path: str, architecture: Embe
 @main.command()
 @argument('input-path', type = str, default = RAW_DATA_PATH)
 @argument('output-path', type = str, default = PREPARED_DATA_PATH)
+@argument('annotations-path', type = str, required = False)
 @option('--train-fraction', '-t', type = float, default = DEFAULT_TRAIN_FRACTION)
 @option('--seed', '-s', type = int, default = DEFAULT_SEED)
-def prepare(input_path: str, output_path: str, train_fraction: float, seed: int):
-    prepare_impl(input_path, output_path, train_fraction, seed)
+def prepare(input_path: str, output_path: str, annotations_path: str, train_fraction: float, seed: int):
+    prepare_impl(input_path, output_path, annotations_path, train_fraction, seed)
 
 
 if __name__ == '__main__':

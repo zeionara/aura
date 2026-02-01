@@ -103,7 +103,7 @@ def get_elements(content: etree.XML, comments: dict = None):
 
             elements_with_comments.append((element, tuple(element_comments) if len(element_comments) > 0 else None))
 
-    if (n_comments := len(comments.values())) > 0:
+    if comments is not None and (n_comments := len(comments.values())) > 0:
         raise ValueError(f'Left {n_comments} unresolved comments')
 
     return elements_with_comments
