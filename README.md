@@ -153,7 +153,7 @@ Vectorization is then performed by calling method `embed` on the prepared `json`
 
 ### Dataset versions
 
-The full dataset contains **420** files. This dataset was split into parts, and the following versions were generated:
+The full dataset contains **410** files. This dataset was split into parts, and the following versions were generated:
 
 | Dataset ID | Source | Annotations | Manual | Description |
 | --- | --- | --- | --- | --- |
@@ -166,7 +166,8 @@ The full dataset contains **420** files. This dataset was split into parts, and 
 | `2026.01.24.02` | Yes | Yes | No | Contains **80** documents which made up the second large batched passed to `mistralai/Mistral-Small-3.2-24B-Instruct-2506` |
 | `2026.02.01.01` | Yes | Yes | No | Contains **8** documents, which were originally excluded from the `sets-of-rules` due to unconventional table naming patterns |
 | `2026.02.01.02` | Yes | Yes | No | Contains **197** documents, which result from merging `2026.01.24.01` and `2026.01.24.02` |
-| `2026.02.01.03` | Yes | Yes | No | Contains the remaining **210** documents from the full dataset |
+| `2026.02.01.03` | Yes | Yes | No | Contains the remaining **205** documents from the full dataset |
+| `2026.02.02.01` | Yes | Yes | No | Contains the first **205** documents (sorting by increasing document size) from the full dataset (`2026.02.01.02` + `2026.02.01.01`) |
 
 ### The automatic workflow
 
