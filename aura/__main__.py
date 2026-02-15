@@ -28,6 +28,9 @@ DEFAULT_TRAIN_FRACTION = 0.6
 DEFAULT_SEED = 17
 DEFAULT_RELEVANCE_THRESHOLD = 0.5
 
+SOURCE_PATH_TEMPLATE = os_path.join('assets', 'data', '{dataset_id}', 'source')
+ANNOTATIONS_PATH_TEMPLATE = os_path.join('assets', 'data', '{dataset_id}', 'annotations')
+
 
 logger = getLogger(__name__)
 
@@ -165,6 +168,16 @@ def annotate(input_path: str, output_path: str, batch_size: int, n_batches: int,
     )
 
     annotator.annotate(input_path, output_path, batch_size, n_batches, ckpt_period = ckpt_period)
+
+
+@main.command()
+@argument('dataset-id', type = str)
+def stats(dataset_id: str):
+    source_path = SOURCE_PATH_TEMPLATE.format(dataset_id = dataset_id)
+    annotations_path = ANNOTATIONS_PATH_TEMPLATE.format(dataset_id = dataset_id)
+
+    annotator = Annotator(llm_configs = None)
+    annotator.annotate(input_path = source_path, output_path = annotations_path, concurrent = False)
 
 
 @main.command()

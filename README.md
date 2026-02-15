@@ -179,6 +179,12 @@ If you have a collection of `.docx` documents with tables that you'd like to ann
 python -m aura annotate assets/data/default/source assets/data/default/annotations --batch-size 10
 ```
 
+To view annotation stats:
+
+```sh
+python -m aura stats default
+```
+
 Then convert them to format for vectorization:
 
 ```sh

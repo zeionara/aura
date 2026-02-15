@@ -278,14 +278,15 @@ def make_table_header(table_label_candidates: list[str]):
 
 # def handle_file(llm_configs: list[dict], input_root: str, input_filename: str, output_path: str, batch_size: int, n_batches: int, table_label_search_window: int, ckpt_period: int):
 def handle_file(args):
-    llm_configs, input_root, input_filename, output_path, batch_size, n_batches, table_label_search_window, ckpt_period = args
+    llm_configs, input_root, input_filename, output_path, batch_size, n_batches, table_label_search_window, ckpt_period, concurrent = args
 
-    logger.info('Handling file %s in thread %d', input_filename, get_ident())
+    if concurrent:
+        logger.info('Handling file %s in thread %d', input_filename, get_ident())
 
     if not input_filename.endswith('.docx'):
         return
 
-    llms = [VllmClient(**config) for config in llm_configs]
+    llms = None if llm_configs is None else [VllmClient(**config) for config in llm_configs]
 
     start_file = time()
 
@@ -309,6 +310,7 @@ def handle_file(args):
     file = f'{input_filename}'
 
     previous_paragraph_ids = None
+    n_table_elements = 0
 
     if os_path.isfile(output_filename):
         # logger.info('%s - File "%s" already exists. Moving forward', file, output_filename)
@@ -339,6 +341,8 @@ def handle_file(args):
                 if len(paragraphs) > len(previous_paragraph_ids):
                     previous_paragraph_ids.append(paragraph.id)
         else:
+            n_table_elements += 1
+
             if len(paragraphs) < 1:
                 continue
 
@@ -416,21 +420,25 @@ def handle_file(args):
             }
             table.label = label
             logger.debug('%s - Found table %s - %d x %d', file, label, table.n_rows, table.n_cols)
-            logger.debug('%s - Table %s - %d x %d Content: %s', file, label, table.n_rows, table.n_cols, ', '.join(f'"{cell}"' for cell in table.cells))
+            # logger.debug('%s - Table %s - %d x %d Content: %s', file, label, table.n_rows, table.n_cols, ', '.join(f'"{cell}"' for cell in table.cells))
 
             table_label_candidates = []
 
             tables.append(table)
 
     logger.info(
-        '%s - Found %d tables and %d paragraphs',
+        '%s - Found %d tables (%d table elements) and %d paragraphs',
         file,
         len(tables),
+        n_table_elements,
         len(paragraphs)
     )
 
     tables_counter = 0
     tables_total = len(tables)
+
+    if llm_configs is None:
+        return
 
     for table in tables:
         tables_counter += 1
@@ -589,7 +597,8 @@ class Annotator:
     def annotate(
         self, input_path: str, output_path: str,
         batch_size: int = None, n_batches: int = None,
-        table_label_search_window: int = 20, ckpt_period: int = None
+        table_label_search_window: int = 20, ckpt_period: int = None,
+        concurrent: bool = True
     ):
         if not os_path.isdir(output_path):
             mkdir(output_path)
@@ -607,10 +616,13 @@ class Annotator:
                         batch_size,
                         n_batches,
                         table_label_search_window,
-                        ckpt_period
+                        ckpt_period,
+                        concurrent
                     )
                 )
 
-        # for iterable in iterables:
-        #     handle_file(iterable)
-        self.workers.map(handle_file, iterables)
+        if concurrent is False or self.llm_configs is None:
+            for iterable in iterables:
+                handle_file(iterable)
+        else:
+            self.workers.map(handle_file, iterables)

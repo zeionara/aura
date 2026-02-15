@@ -2,7 +2,7 @@ from logging import getLogger, StreamHandler, INFO, DEBUG, Formatter
 
 root = getLogger()
 
-root.setLevel(DEBUG)
+root.setLevel(INFO)
 
 handler = StreamHandler()
 
