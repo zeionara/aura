@@ -60,6 +60,14 @@ def prepare_annotations(input_path: str, output_path: str, annotations_path: str
     if not os_path.isdir(output_path):
         mkdir(output_path)
 
+    n_files = 0
+
+    for root, _, files in walk(annotations_path):
+        for file in files:
+            n_files += 1
+
+    i_file = 1
+
     for root, _, files in walk(annotations_path):
         for file in files:
 
@@ -212,11 +220,14 @@ def prepare_annotations(input_path: str, output_path: str, annotations_path: str
                 elements.append(table_element)
 
             logger.debug(
-                'Found %d tables and %d paragraphs in file %s',
+                'Found %d tables and %d paragraphs in file %s (%d/%d)',
                 n_tables,
                 0 if n_paragraphs is None else n_paragraphs,
-                file
+                file,
+                i_file,
+                n_files
             )
+            i_file += 1
 
             with open(output_file, 'w', encoding = 'utf-8') as file:
                 dump(

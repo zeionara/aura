@@ -162,12 +162,14 @@ The full dataset contains **410** files. This dataset was split into parts, and 
 | `sets-of-rules` | Yes | No | No | Contains **108** documents which made up the first large batch passed to `mistralai/Mistral-Small-3.2-24B-Instruct-2506` |
 | `2025.12.17.01` | No | Yes | No | Includes annotations for **119** files with the lowest size from the original dataset. This dataset is corrupted, because it contains annotations from multiple `source` datasets (`sets-of-rules`, `2026.01.22.01`, `2026.02.01.01`, and the full dataset) |
 | `2026.01.22.01` | Yes | Yes | No | Contains **9** documents excluded from `sets-of-rules` due to the table size, which resulted in the prompt containing too much text (this problem was solved by deleting empty cells from large tables) |
-| `2026.01.24.01` | Yes | Yes | No | The improved version of `2025.11.07.02`, which consists of **117** documents (`sets-of-rules` + `2026.01.22.01`) and includes only files, from which there is a source in `sets-of-rules` |
+| `2026.01.24.01` | Yes | Yes | No | The improved version of `2025.12.17.01`, which consists of **117** documents (`sets-of-rules` + `2026.01.22.01`) and includes only files, from which there is a source in `sets-of-rules` |
 | `2026.01.24.02` | Yes | Yes | No | Contains **80** documents which made up the second large batched passed to `mistralai/Mistral-Small-3.2-24B-Instruct-2506` |
 | `2026.02.01.01` | Yes | Yes | No | Contains **8** documents, which were originally excluded from the `sets-of-rules` due to unconventional table naming patterns |
 | `2026.02.01.02` | Yes | Yes | No | Contains **197** documents, which result from merging `2026.01.24.01` and `2026.01.24.02` |
 | `2026.02.01.03` | Yes | Yes | No | Contains the remaining **205** documents from the full dataset |
 | `2026.02.02.01` | Yes | Yes | No | Contains the first **205** documents (sorting by increasing document size) from the full dataset (`2026.02.01.02` + `2026.02.01.01`) |
+| `2026.02.02.02` | Yes | Yes | No | Copy of the `2026.02.02.01` for generating embeddings |
+| `2026.02.02.03` | Yes | Yes | No | **5** files with annotation errors from the `2026.02.02.02` |
 
 ### The automatic workflow
 
