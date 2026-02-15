@@ -16,18 +16,17 @@ from .Subset import Subset
 logger = getLogger(__name__)
 
 
-RELEVANCE_THRESHOLD = 0.5
 MODEL = 'mistral-24b'
 SCALE = 1.0
 
 
-def prepare(input_path: str, output_path: str, annotations_path: str, train_fraction: float, seed: int):
+def prepare(input_path: str, output_path: str, annotations_path: str, train_fraction: float, seed: int, relevance_threshold: float):
     random_seed(seed)
 
     if annotations_path is None:
         return prepare_source(input_path, output_path, train_fraction)
 
-    return prepare_annotations(input_path, output_path, annotations_path, train_fraction)
+    return prepare_annotations(input_path, output_path, annotations_path, train_fraction, relevance_threshold)
 
 
 def make_comment(comment_id: int, table_label: str, score_value: float, note: str = None):
@@ -57,7 +56,7 @@ def make_paragraph_element(paragraph_id: str, text: str, train_fraction: float, 
     return element
 
 
-def prepare_annotations(input_path: str, output_path: str, annotations_path: str, train_fraction: float):
+def prepare_annotations(input_path: str, output_path: str, annotations_path: str, train_fraction: float, relevance_threshold: float):
     if not os_path.isdir(output_path):
         mkdir(output_path)
 
@@ -109,24 +108,49 @@ def prepare_annotations(input_path: str, output_path: str, annotations_path: str
                 paragraph_id_to_score = {}
 
                 paragraphs = table_content['paragraphs']
+
+                n_paragraphs_with_missing_scores = 0
                 n_paragraphs_for_current_table = len(paragraphs)
 
                 for paragraph in paragraphs:
-                    if (score_value := (score := paragraph['scores'][MODEL])['score']) > RELEVANCE_THRESHOLD:
+                    model_scores = paragraph['scores'][MODEL]
+
+                    if model_scores is None or 'score' not in model_scores:
+                        n_paragraphs_with_missing_scores += 1
+                        continue
+
+                    if not isinstance((score_value := model_scores['score']), float):
+                        try:
+                            score_value = float(model_scores['score'])
+                        except ValueError:
+                            logger.warning('%s - %s - incorrect score: %s', file, table_label, score_value)
+                            n_paragraphs_with_missing_scores += 1
+                            continue
+
+                    if score_value > relevance_threshold:
                         paragraph_id = paragraph['id']
 
                         paragraph_id_to_score[paragraph_id] = score_value
 
                         if (comments := paragraph_id_to_comments.get(paragraph_id)):
                             comments.append(
-                                make_comment(comment_id, table_label, score_value, score['comment'])
+                                make_comment(comment_id, table_label, score_value, model_scores['comment'])
                             )
                         else:
                             paragraph_id_to_comments[paragraph_id] = [
-                                make_comment(comment_id, table_label, score_value, score['comment'])
+                                make_comment(comment_id, table_label, score_value, model_scores['comment'])
                             ]
 
                         comment_id += 1
+
+                if n_paragraphs_with_missing_scores > 0:
+                    logger.warning(
+                        '%s - %s - %d/%d paragraphs are missing score',
+                        file,
+                        table_label,
+                        n_paragraphs_with_missing_scores,
+                        n_paragraphs_for_current_table
+                    )
 
                 table_contexts.append(
                     {
@@ -139,9 +163,18 @@ def prepare_annotations(input_path: str, output_path: str, annotations_path: str
                     n_paragraphs = n_paragraphs_for_current_table
                     continue
 
-                assert n_paragraphs == n_paragraphs_for_current_table
+                assert n_paragraphs == n_paragraphs_for_current_table, (
+                    f'{file} - {table_label} '
+                    'number of paragraphs in table is not equal to the number of paragraphs in other tables '
+                    f'({n_paragraphs_for_current_table} != {n_paragraphs})'
+                )
 
-            assert n_tables == len(table_elements)
+            if n_tables != (n_table_elements := len(table_elements)):
+                logger.error(
+                    '%s - number of tables in file is not equal to the number of table elements (%d != %d)',
+                    file, n_tables, n_table_elements
+                )
+                continue
 
             elements = []
 
@@ -178,7 +211,12 @@ def prepare_annotations(input_path: str, output_path: str, annotations_path: str
             for table_element in table_elements_empty:
                 elements.append(table_element)
 
-            logger.debug('Found %d tables and %d paragraphs in file %s', n_tables, n_paragraphs, file)
+            logger.debug(
+                'Found %d tables and %d paragraphs in file %s',
+                n_tables,
+                0 if n_paragraphs is None else n_paragraphs,
+                file
+            )
 
             with open(output_file, 'w', encoding = 'utf-8') as file:
                 dump(

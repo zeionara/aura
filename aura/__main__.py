@@ -26,6 +26,7 @@ MODEL_PARAMS_PATH = None  # 'assets/weights.pth'
 
 DEFAULT_TRAIN_FRACTION = 0.6
 DEFAULT_SEED = 17
+DEFAULT_RELEVANCE_THRESHOLD = 0.5
 
 
 logger = getLogger(__name__)
@@ -280,8 +281,9 @@ def embed(input_path: str, output_path: str, model_path: str, architecture: Embe
 @argument('annotations-path', type = str, required = False)
 @option('--train-fraction', '-t', type = float, default = DEFAULT_TRAIN_FRACTION)
 @option('--seed', '-s', type = int, default = DEFAULT_SEED)
-def prepare(input_path: str, output_path: str, annotations_path: str, train_fraction: float, seed: int):
-    prepare_impl(input_path, output_path, annotations_path, train_fraction, seed)
+@option('--relevance-threshold', '-r', type = float, default = DEFAULT_RELEVANCE_THRESHOLD)
+def prepare(input_path: str, output_path: str, annotations_path: str, train_fraction: float, seed: int, relevance_threshold: float):
+    prepare_impl(input_path, output_path, annotations_path, train_fraction, seed, relevance_threshold)
 
 
 if __name__ == '__main__':
