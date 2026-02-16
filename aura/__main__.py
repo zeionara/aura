@@ -1,8 +1,9 @@
 from os import walk, path as os_path, mkdir, getenv
+from pathlib import Path
 from json import dump, load
 from logging import getLogger
-from torch import optim
 
+from torch import optim
 from click import group, argument, option
 
 from .util import read_elements, make_system_prompt, dict_from_json_file
@@ -31,6 +32,8 @@ DEFAULT_RELEVANCE_THRESHOLD = 0.5
 SOURCE_PATH_TEMPLATE = os_path.join('assets', 'data', '{dataset_id}', 'source')
 PREPARED_PATH_TEMPLATE = os_path.join('assets', 'data', '{dataset_id}', 'prepared')
 ANNOTATIONS_PATH_TEMPLATE = os_path.join('assets', 'data', '{dataset_id}', 'annotations')
+MODEL_PATH_TEMPLATE = os_path.join('assets', 'data', '{dataset_id}', 'models', '{model}.pth')
+EVALUATION_REPORT_PATH_TEMPLATE = os_path.join('assets', 'data', '{dataset_id}', 'evaluation.tsv')
 
 
 logger = getLogger(__name__)
@@ -183,12 +186,14 @@ def stats(dataset_id: str):
 
 
 @main.command()
-@argument('input-path', type = str, default = PREPARED_DATA_PATH)
-@argument('output-path', type = str, default = MODEL_PARAMS_PATH)
+@argument('dataset-id', type = str)
 @option('--model', '-m', type = BaseModel, default = BaseModel.E5_LARGE)
 @option('--cpu', '-c', is_flag = True)
 @option('--input-dim', '-d', type = int, default = DEFAULT_INPUT_DIM)
-def train(input_path: str, output_path: str, model: BaseModel, cpu: bool, input_dim: int):
+def train(dataset_id: str, model: BaseModel, cpu: bool, input_dim: int):
+    input_path = PREPARED_PATH_TEMPLATE.format(dataset_id = dataset_id)
+    output_path = MODEL_PATH_TEMPLATE.format(dataset_id = dataset_id, model = Path(model.value).name)
+
     embedder = StructuredEmbedder(model, cuda = not cpu, input_dim = input_dim)
 
     weights_directory = os_path.dirname(output_path)
@@ -208,6 +213,9 @@ def train(input_path: str, output_path: str, model: BaseModel, cpu: bool, input_
             with open(os_path.join(root, filename), 'r') as file:
                 data = load(file)
 
+            for element in elements:
+                element['document'] = filename
+
             elements.extend(data['elements'])
 
     print()
@@ -224,9 +232,11 @@ def train(input_path: str, output_path: str, model: BaseModel, cpu: bool, input_
 
 
 @main.command()
-@argument('input-path', type = str, default = PREPARED_DATA_PATH)
-@argument('output-path', type = str, default = REPORT_PATH)
-def evaluate(input_path: str, output_path: str):
+@argument('dataset-id', type = str)
+def eval(dataset_id: str):
+    input_path = PREPARED_PATH_TEMPLATE.format(dataset_id = dataset_id)
+    output_path = EVALUATION_REPORT_PATH_TEMPLATE.format(dataset_id = dataset_id)
+
     dfs = []
 
     reports_directory = os_path.dirname(output_path)
@@ -255,16 +265,23 @@ def evaluate(input_path: str, output_path: str):
 
 @main.command()
 @argument('dataset-id', type = str)
-@option('--model-path', '-p', type = str, default = MODEL_PARAMS_PATH)
 @option('--architecture', '-a', type = EmbedderType, default = EmbedderType.FLAT)
 @option('--model', '-m', type = BaseModel, default = BaseModel.E5_LARGE)
 @option('--cpu', '-c', is_flag = True)
 @option('--input-dim', '-d', type = int, default = DEFAULT_INPUT_DIM)
-def embed(dataset_id: str, model_path: str, architecture: EmbedderType, model: BaseModel, cpu: bool, input_dim: int):
+def embed(dataset_id: str, architecture: EmbedderType, model: BaseModel, cpu: bool, input_dim: int):
     if architecture == EmbedderType.FLAT:
         embedder = FlatEmbedder(model, cuda = not cpu)
     elif architecture == EmbedderType.STRUCTURED:
-        embedder = StructuredEmbedder(model, cuda = not cpu, input_dim = input_dim, path = model_path)
+        embedder = StructuredEmbedder(
+            model,
+            cuda = not cpu,
+            input_dim = input_dim,
+            path = MODEL_PATH_TEMPLATE.format(
+                dataset_id = dataset_id,
+                model = Path(model.value).name
+            )
+        )
     else:
         raise ValueError('Unsupported embedder architecture')
 

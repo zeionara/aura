@@ -202,19 +202,19 @@ python -m aura embed default -a flat -m DeepPavlov/rubert-base-cased -d 768
 Train a custom `structured` embedding model:
 
 ```sh
-python -m aura train assets/data/default/prepared assets/data/default/models/rubert-base-cased.pth -m DeepPavlov/rubert-base-cased -d 768
+python -m aura train default -m DeepPavlov/rubert-base-cased -d 768
 ```
 
 Vectorize paragraph and cell content using this model:
 
 ```sh
-python -m aura embed assets/data/default/prepared assets/data/default/prepared -p assets/data/default/models/rubert-base-cased.pth -a structured -m DeepPavlov/rubert-base-cased -d 768
+python -m aura embed default -a structured -m DeepPavlov/rubert-base-cased -d 768
 ```
 
 Run evaluation:
 
 ```sh
-python -m aura evaluate assets/data/default/prepared assets/data/default/evaluation.tsv
+python -m aura eval default
 ```
 
 Evaluation report example:

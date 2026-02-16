@@ -1,4 +1,6 @@
 import re
+from logging import getLogger
+from json import dumps
 
 from transformers import AutoTokenizer, AutoModel
 from torch import tensor as torch_tensor, stack as torch_stack, device, Tensor, save, optim, load
@@ -9,6 +11,9 @@ from .FlatEmbedder import embedding_to_list
 from .BaseModel import BaseModel
 from .util import to_cuda
 from ..Subset import Subset
+
+
+logger = getLogger(__name__)
 
 
 class StructuredEmbedder:
@@ -31,7 +36,6 @@ class StructuredEmbedder:
         else:
             self.device = 'cpu'
 
-
     def has_flat_embedding(self, element: dict):
         if 'embeddings' not in element:
             return False
@@ -40,7 +44,6 @@ class StructuredEmbedder:
             return False
 
         return self.base_model in element['embeddings']['flat']
-
 
     def tokenize_table(self, table: dict, max_length: int, batch_size: int):  # TODO: Implement support for batch_size and max_length
         id_to_embedding = {}
@@ -51,9 +54,12 @@ class StructuredEmbedder:
         row_embeddings = []
         col_embeddings = []
 
+        i = -1
+
         for row in table['rows']:
             cell_embeddings = []
             j = 0
+            i += 1
 
             for cell in row:
                 if cell.get('text') is None:
@@ -86,16 +92,41 @@ class StructuredEmbedder:
                             try:
                                 col_embeddings[j].append(cell_embedding)
                             except IndexError:
-                                raise
+                                for k in range(len(col_embeddings)):
+                                    col_embeddings[k] = col_embeddings[k][:-1]  # delete col embeddings for the overflowing row
+
+                                # for row in table['rows']:
+                                #     for cell in row:
+                                #         cell.pop('embeddings')
+                                # table.pop('embeddings')
+
+                                logger.debug(
+                                    # '%s - Table %s - Can\'t insert col embedding in row %d:\n%s\n in table:\n%s',
+                                    '%s - Table %s - Can\'t insert col embedding in row %d',
+                                    table.get('document', 'unknown'),
+                                    table['label'],
+                                    i,
+                                    # dumps(table['rows'][i], indent = 2, ensure_ascii = False),
+                                    # dumps(table, indent = 2, ensure_ascii = False)
+                                )
+                                # raise
+                                break
 
                             j += 1
-
-            row_embeddings.append(torch_tensor(cell_embeddings, device = self.device))  # tensor with row-wise cell embeddings
+            else:  # if row is not overflowing
+                row_tensor = torch_tensor(cell_embeddings, device = self.device)
+                # print('row tensor shape:', row_tensor.shape)
+                row_embeddings.append(row_tensor)  # tensor with row-wise cell embeddings
 
             if is_first_row:
                 is_first_row = False
 
         col_embeddings = [torch_tensor(cell_embeddings, device = self.device) for cell_embeddings in col_embeddings]
+
+        for col_tensor in col_embeddings:
+            if any([item < 1 for item in col_tensor.shape]):
+                logger.debug('%s - Table %s contains incorrect number of columns', table.get('document', 'unknown'), table['label'])
+                return None
 
         return row_embeddings, col_embeddings
 
@@ -116,8 +147,13 @@ class StructuredEmbedder:
                     print(element)
                     raise ValueError(f'Please, apply flat embedder first for model {self.base_model}')
             elif element['type'] == 'table':
+                inputs = self.tokenize_table(element, batch_size = batch_size, max_length = max_length)
+
+                if inputs is None:
+                    continue
+
                 embedding = self.model(
-                    *self.tokenize_table(element, batch_size = batch_size, max_length = max_length)
+                    *inputs
                 )
                 self.set_element_embedding(element, embedding)
 
@@ -130,7 +166,7 @@ class StructuredEmbedder:
 
         self.model.train()
 
-        for _ in range(epochs):
+        for i in range(epochs):
             total_loss = 0
             batch_count = 0
 
@@ -144,6 +180,9 @@ class StructuredEmbedder:
                         continue
 
                     inputs = self.tokenize_table(element, batch_size = batch_size, max_length = max_length)  # row-wise and column-wise cell embeddings
+
+                    if inputs is None:
+                        continue  # skip such table
 
                     output = self.model(*inputs)  # table embedding
 
@@ -171,7 +210,7 @@ class StructuredEmbedder:
                         # print(f'Batch loss: {avg_batch_loss.item():.4f}')
 
             if batch_count > 0:
-                print(f'Average epoch loss: {total_loss / batch_count:.4f}')
+                print(f'[{i} / {epochs}] Average epoch loss: {total_loss / batch_count:.4f}')
 
     def save(self, path: str):
         save(self.model.state_dict(), path)

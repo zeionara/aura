@@ -1,3 +1,5 @@
+from logging import getLogger
+
 import numpy as np
 import pandas as pd
 from collections import defaultdict
@@ -5,6 +7,9 @@ from sklearn.metrics import ndcg_score
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 
 from .Subset import Subset
+
+
+logger = getLogger(__name__)
 
 
 def compute_ap(ranked_list, relevant_set):
@@ -279,12 +284,26 @@ def average(dataframes):
     reference_idx = dataframes[0].index
     reference_cols = dataframes[0].columns
 
-    for i, df in enumerate(dataframes):
-        if not df.index.equals(reference_idx) or not df.columns.equals(reference_cols):
-            raise ValueError(f"DataFrame at position {i} has different structure than the first DataFrame")
+    while len(dataframes) > 0:
+        for i, df in enumerate(dataframes):
+            if not df.index.equals(reference_idx) or not df.columns.equals(reference_cols):
+                # raise ValueError(f"DataFrame at position {i} has different structure than the first DataFrame")
+                logger.warning("DataFrame at position %d has different structure than the first DataFrame. Trying to skip it...", i)
+                dataframes = dataframes[0:i] + dataframes[i + 1:]
+                continue
+        break
+
+    non_empty_dataframes = []
+
+    for df in dataframes:
+        if not df.empty:
+            non_empty_dataframes.append(df)
+
+    print('N total dfs:', len(dataframes))
+    print('N non-empty dfs:', len(non_empty_dataframes))
 
     # Create 3D array of all DataFrame values
-    all_values = np.array([df.values for df in dataframes])
+    all_values = np.array([df.values for df in non_empty_dataframes])
 
     # Compute mean along the first axis (across DataFrames)
     averaged_values = np.nanmean(all_values, axis = 0)
