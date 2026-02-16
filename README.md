@@ -196,7 +196,7 @@ python -m aura prepare default
 Then vectorize paragraph and cell content using baseline (`flat`) model:
 
 ```sh
-python -m aura embed assets/data/default/prepared assets/data/default/prepared -a flat -m DeepPavlov/rubert-base-cased -d 768
+python -m aura embed default -a flat -m DeepPavlov/rubert-base-cased -d 768
 ```
 
 Train a custom `structured` embedding model:

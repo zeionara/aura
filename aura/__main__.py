@@ -254,14 +254,13 @@ def evaluate(input_path: str, output_path: str):
 
 
 @main.command()
-@argument('input-path', type = str, default = PREPARED_DATA_PATH)
-@argument('output-path', type = str, default = PREPARED_DATA_PATH)
+@argument('dataset-id', type = str)
 @option('--model-path', '-p', type = str, default = MODEL_PARAMS_PATH)
 @option('--architecture', '-a', type = EmbedderType, default = EmbedderType.FLAT)
 @option('--model', '-m', type = BaseModel, default = BaseModel.E5_LARGE)
 @option('--cpu', '-c', is_flag = True)
 @option('--input-dim', '-d', type = int, default = DEFAULT_INPUT_DIM)
-def embed(input_path: str, output_path: str, model_path: str, architecture: EmbedderType, model: BaseModel, cpu: bool, input_dim: int):
+def embed(dataset_id: str, model_path: str, architecture: EmbedderType, model: BaseModel, cpu: bool, input_dim: int):
     if architecture == EmbedderType.FLAT:
         embedder = FlatEmbedder(model, cuda = not cpu)
     elif architecture == EmbedderType.STRUCTURED:
@@ -269,14 +268,27 @@ def embed(input_path: str, output_path: str, model_path: str, architecture: Embe
     else:
         raise ValueError('Unsupported embedder architecture')
 
+    input_path = PREPARED_PATH_TEMPLATE.format(dataset_id = dataset_id)
+    output_path = PREPARED_PATH_TEMPLATE.format(dataset_id = dataset_id)
+
+    n_files = 0
+
+    for root, _, files in walk(input_path):
+        for filename in files:
+            n_files += 1
+
+    i_file = 1
+
     for root, _, files in walk(input_path):
         for filename in files:
             if not filename.endswith('json'):
                 continue
 
             print()
-            print(filename)
+            print(f'{filename} ({i_file} / {n_files})')
             print()
+
+            i_file += 1
 
             with open(os_path.join(root, filename), 'r') as file:
                 data = load(file)
