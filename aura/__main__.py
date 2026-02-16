@@ -29,6 +29,7 @@ DEFAULT_SEED = 17
 DEFAULT_RELEVANCE_THRESHOLD = 0.5
 
 SOURCE_PATH_TEMPLATE = os_path.join('assets', 'data', '{dataset_id}', 'source')
+PREPARED_PATH_TEMPLATE = os_path.join('assets', 'data', '{dataset_id}', 'prepared')
 ANNOTATIONS_PATH_TEMPLATE = os_path.join('assets', 'data', '{dataset_id}', 'annotations')
 
 
@@ -289,14 +290,20 @@ def embed(input_path: str, output_path: str, model_path: str, architecture: Embe
 
 
 @main.command()
-@argument('input-path', type = str, default = RAW_DATA_PATH)
-@argument('output-path', type = str, default = PREPARED_DATA_PATH)
-@argument('annotations-path', type = str, required = False)
+@argument('dataset-id', type = str)
 @option('--train-fraction', '-t', type = float, default = DEFAULT_TRAIN_FRACTION)
 @option('--seed', '-s', type = int, default = DEFAULT_SEED)
 @option('--relevance-threshold', '-r', type = float, default = DEFAULT_RELEVANCE_THRESHOLD)
-def prepare(input_path: str, output_path: str, annotations_path: str, train_fraction: float, seed: int, relevance_threshold: float):
-    prepare_impl(input_path, output_path, annotations_path, train_fraction, seed, relevance_threshold)
+@option('--no-annotations', '-n', is_flag = True)
+def prepare(dataset_id: str, train_fraction: float, seed: int, relevance_threshold: float, no_annotations: bool):
+    prepare_impl(
+        input_path = SOURCE_PATH_TEMPLATE.format(dataset_id = dataset_id),
+        output_path = PREPARED_PATH_TEMPLATE.format(dataset_id = dataset_id),
+        annotations_path = None if no_annotations else ANNOTATIONS_PATH_TEMPLATE.format(dataset_id = dataset_id),
+        train_fraction = train_fraction,
+        seed = seed,
+        relevance_threshold = relevance_threshold
+    )
 
 
 if __name__ == '__main__':

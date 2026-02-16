@@ -90,14 +90,19 @@ def prepare_annotations(input_path: str, output_path: str, annotations_path: str
 
             table_elements_empty = []
 
+            first_element = True
+
             for element, _ in xml_elements:
-                if not element.tag.endswith('}p'):
+                if not element.tag.endswith('}p') and not first_element:
                     table = Table.from_xml(element)
 
                     if table.n_cols < 2 or table.n_rows < 2:
                         table_elements_empty.append(table.json)
                     else:
                         table_elements.append(table.json)
+
+                if first_element:
+                    first_element = False
 
             # Parse paragraphs from annotations
 
@@ -153,7 +158,7 @@ def prepare_annotations(input_path: str, output_path: str, annotations_path: str
 
                 if n_paragraphs_with_missing_scores > 0:
                     logger.warning(
-                        '%s - %s - %d/%d paragraphs are missing score',
+                        '%s - Table %s - %d/%d paragraphs are missing score',
                         file,
                         table_label,
                         n_paragraphs_with_missing_scores,
@@ -179,7 +184,7 @@ def prepare_annotations(input_path: str, output_path: str, annotations_path: str
 
             if n_tables != (n_table_elements := len(table_elements)):
                 logger.error(
-                    '%s - number of tables in file is not equal to the number of table elements (%d != %d)',
+                    '%s - number of tables in annotations file is not equal to the number of table elements in source file (%d != %d)',
                     file, n_tables, n_table_elements
                 )
                 continue
