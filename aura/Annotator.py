@@ -57,7 +57,7 @@ def generate_batches(items: list[Paragraph], batch_size: int, llms: list[LLMClie
             for previous_annotation in previous_annotations:
                 if previous_annotation['id'] == item.id:
                     for llm in llms:
-                        if llm.label not in previous_annotation['scores']:
+                        if previous_annotation['scores'].get(llm.label) is None:
                             llm_to_items[llm.label].append(item)
                     break
             else:

@@ -142,7 +142,8 @@ def apply(input_path: str, annotations_path: str, output_path: str, threshold: f
 @option('--batch-size', '-b', type = int, default = None)
 @option('--n-batches', '-n', type = int, default = None)
 @option('--ckpt-period', '-c', type = int, default = 2)
-def annotate(input_path: str, output_path: str, batch_size: int, n_batches: int, ckpt_period: int):
+@option('--no-concurrency', '-x', is_flag = True)
+def annotate(input_path: str, output_path: str, batch_size: int, n_batches: int, ckpt_period: int, no_concurrency: bool):
     annotator = Annotator(
         llm_configs = [
             {
@@ -168,7 +169,7 @@ def annotate(input_path: str, output_path: str, batch_size: int, n_batches: int,
         ]
     )
 
-    annotator.annotate(input_path, output_path, batch_size, n_batches, ckpt_period = ckpt_period)
+    annotator.annotate(input_path, output_path, batch_size, n_batches, ckpt_period = ckpt_period, concurrent = not no_concurrency)
 
 
 @main.command()

@@ -169,8 +169,9 @@ The full dataset contains **410** files. This dataset was split into parts, and 
 | `2026.02.01.03` | Yes | Yes | No | Contains the remaining **205** documents from the full dataset |
 | `2026.02.02.01` | Yes | Yes | No | Contains the first **205** documents (sorting by increasing document size) from the full dataset (`2026.02.01.02` + `2026.02.01.01`) |
 | `2026.02.02.02` | Yes | Yes | No | Copy of the `2026.02.02.01` for generating embeddings |
-| `2026.02.02.03` | Yes | Yes | No | **5** files with annotation errors from the `2026.02.02.02` |
-| `2026.02.02.04` | Yes | Yes | No | **3** files with annotation errors from the `2026.02.02.03` (**2** files were excluded because the error was that the preparation scripts counted the first table in document as a meaningful table, which is incorrect, the remaining documents contain missing paragraph scores) |
+| `2026.02.02.03` | Yes | Yes | No | Contains **5** files with annotation errors from the `2026.02.02.02` |
+| `2026.02.02.04` | Yes | Yes | No | Contains **3** files with annotation errors from the `2026.02.02.03` (**2** files were excluded because the error was that the preparation scripts counted the first table in document as a meaningful table, which is incorrect, the remaining documents contain missing paragraph scores) |
+| `2026.02.02.05` | Yes | Yes | No | Contains the same **205** documents as `2026.02.02.02` but without missing scores for files in `2026.02.02.04` |
 
 ### The automatic workflow
 
@@ -189,7 +190,7 @@ python -m aura stats default
 Then convert them to format for vectorization:
 
 ```sh
-python -m aura prepare assets/data/default/source assets/data/default/prepared assets/data/default/annotations
+python -m aura prepare default
 ```
 
 Then vectorize paragraph and cell content using baseline (`flat`) model:
