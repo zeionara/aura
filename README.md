@@ -197,18 +197,21 @@ Then vectorize paragraph and cell content using baseline (`flat`) model:
 
 ```sh
 python -m aura embed default -a flat -m DeepPavlov/rubert-base-cased -d 768
+python -m aura embed default -a flat -m intfloat/multilingual-e5-large-instruct
 ```
 
 Train a custom `structured` embedding model:
 
 ```sh
 python -m aura train default -m DeepPavlov/rubert-base-cased -d 768
+python -m aura train default -m intfloat/multilingual-e5-large-instruct
 ```
 
 Vectorize paragraph and cell content using this model:
 
 ```sh
 python -m aura embed default -a structured -m DeepPavlov/rubert-base-cased -d 768
+python -m aura embed default -a structured -m intfloat/multilingual-e5-large-instruct
 ```
 
 Run evaluation:
