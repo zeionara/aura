@@ -30,6 +30,7 @@ DEFAULT_SEED = 17
 DEFAULT_RELEVANCE_THRESHOLD = 0.5
 
 SOURCE_PATH_TEMPLATE = os_path.join('assets', 'data', '{dataset_id}', 'source')
+TABLE_TRACKER_EXPORT_PATH_TEMPLATE = os_path.join('assets', 'data', '{dataset_id}', 'broken-tables.yml')
 PREPARED_PATH_TEMPLATE = os_path.join('assets', 'data', '{dataset_id}', 'prepared')
 ANNOTATIONS_PATH_TEMPLATE = os_path.join('assets', 'data', '{dataset_id}', 'annotations')
 MODEL_PATH_TEMPLATE = os_path.join('assets', 'data', '{dataset_id}', 'models', '{model}.pth')
@@ -191,6 +192,7 @@ def stats(dataset_id: str):
 @option('--cpu', '-c', is_flag = True)
 @option('--input-dim', '-d', type = int, default = DEFAULT_INPUT_DIM)
 def train(dataset_id: str, model: BaseModel, cpu: bool, input_dim: int):
+    table_tracker_export_path = TABLE_TRACKER_EXPORT_PATH_TEMPLATE.format(dataset_id = dataset_id)
     input_path = PREPARED_PATH_TEMPLATE.format(dataset_id = dataset_id)
     output_path = MODEL_PATH_TEMPLATE.format(dataset_id = dataset_id, model = Path(model.value).name)
 
@@ -224,14 +226,14 @@ def train(dataset_id: str, model: BaseModel, cpu: bool, input_dim: int):
                 data = load(file)
 
             for element in data['elements']:
-                element['document'] = filename
+                element['document'] = Path(filename).stem
 
             elements.extend(data['elements'])
 
     logger.info('Training...')
 
     optimizer = optim.Adam(embedder.model.parameters(), lr=1e-4)
-    embedder.train(elements, optimizer)
+    embedder.train(elements, optimizer, table_tracker_export_path=table_tracker_export_path)
 
     embedder.save(output_path)
 

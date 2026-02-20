@@ -9,24 +9,13 @@ import torch.nn.functional as F
 from .AttentionTableEmbedder import AttentionTableEmbedder, DEFAULT_INPUT_DIM
 from .FlatEmbedder import embedding_to_list
 from .BaseModel import BaseModel
-from .util import to_cuda
+from .util import to_cuda, drop_embeddings
 from ..Subset import Subset
+from .TableTracker import TableTracker
 
 
 logger = getLogger(__name__)
 
-
-def drop_embeddings(cells: list[dict]):
-    return [
-        {
-            'id': cell.get('id'),
-            'text': cell.get('text'),
-            'rows': cell.get('rows'),
-            'cols': cell.get('cols'),
-            'updated': cell.get('updated')
-        }
-        for cell in cells
-    ]
 
 class StructuredEmbedder:
     def __init__(self, model: BaseModel, cuda: bool = True, input_dim: int = DEFAULT_INPUT_DIM, path: str = None):
@@ -41,6 +30,7 @@ class StructuredEmbedder:
 
         self.base_model = model.value
         self.cuda = cuda
+        self.table_tracker = TableTracker()
 
         if cuda:
             self.model.to('cuda')
@@ -66,6 +56,10 @@ class StructuredEmbedder:
         row_embeddings = []
         col_embeddings = []
 
+        document = table.get('document', 'unknown')
+        label = table.get('label')
+        broken = False
+
         rows = table['rows']
         n_rows = len(rows)
         i = 0
@@ -90,9 +84,6 @@ class StructuredEmbedder:
                 else:
                     cell_id = cell['id']
 
-                    # if cell_id in id_to_embedding:
-                    #     raise ValueError(f'Duplicate cell ids are not allowed ({cell_id})')
-
                     if not self.has_flat_embedding(cell):
                         raise ValueError(f'Please, apply flat embedder first for model {self.base_model}')
 
@@ -112,19 +103,19 @@ class StructuredEmbedder:
                             try:
                                 col_embeddings[j].append(cell_embedding)
                             except IndexError:
+                                if not broken:
+                                    broken = True
+
                                 if row[0].get('skipped'):
                                     break_outer_loop = True
                                     i += 1
                                     break
 
                                 logger.warning(
-                                    # '%s - Table %s - Can\'t insert col embedding in row %d:\n%s\n in table:\n%s',
                                     '%s - Table %s - Can\'t insert col embedding in row %d. Trying to replicate the structure of the last valid row...',
-                                    table.get('document', 'unknown'),
-                                    table['label'],
+                                    document,
+                                    label,
                                     i,
-                                    # dumps(table['rows'][i], indent = 2, ensure_ascii = False),
-                                    # dumps(table, indent = 2, ensure_ascii = False)
                                 )
 
                                 if i > 0 and len(rows[i - 1]) == len(row) and not row[0].get('updated'):
@@ -152,47 +143,24 @@ class StructuredEmbedder:
                                     break_outer_loop = True
                                     break
 
-                                # for row_to_drop_embeddings in table['rows']:
-                                #     for cell_to_drop_embeddings in row_to_drop_embeddings:
-                                #         if 'embeddings' in cell_to_drop_embeddings:
-                                #             cell_to_drop_embeddings.pop('embeddings')
-                                # table.pop('embeddings')
-
                                 for k in range(len(col_embeddings)):
                                     col_embeddings[k] = col_embeddings[k][:-1]  # delete col embeddings for the overflowing row
 
-                                # logger.warning(
-                                #     '%s - Table %s - Number of cells in row\n%s\nand row\n%s\nare different (%d != %d). Skipping this row.',
-                                #     table.get('document', 'unknown'),
-                                #     table['label'],
-                                #     drop_embeddings(rows[i - 1]),
-                                #     drop_embeddings(row),
-                                #     len(rows[i - 1]),
-                                #     len(row)
-                                # )
-
                                 logger.warning(
                                     '%s - Table %s - Number of cells in row %d and row %d are different (%d != %d). Skipping this row.',
-                                    table.get('document', 'unknown'),
-                                    table['label'],
+                                    document,
+                                    label,
                                     i - 1,
                                     i,
                                     len(rows[i - 1]),
                                     len(row)
                                 )
 
-                                # popped_item = rows.pop(i)
-                                # print('popped item:')
-                                # print(drop_embeddings(popped_item))
-                                # n_rows = len(rows)
-
-                                # raise
-
                                 row[0]['skipped'] = True
                                 i += 1
 
                                 break_outer_loop = True
-                                break  # skip this row
+                                break
 
                             j += 1
 
@@ -200,7 +168,6 @@ class StructuredEmbedder:
                             break
             else:  # if row is not overflowing
                 row_tensor = torch_tensor(cell_embeddings, device = self.device)
-                # print('row tensor shape:', row_tensor.shape)
                 row_embeddings.append(row_tensor)  # tensor with row-wise cell embeddings
                 i += 1
 
@@ -211,8 +178,18 @@ class StructuredEmbedder:
 
         for col_tensor in col_embeddings:
             if any([item < 1 for item in col_tensor.shape]):
-                logger.error('%s - Table %s contains incorrect number of columns', table.get('document', 'unknown'), table['label'])
-                return None
+                # logger.error('%s - Table %s contains incorrect number of columns', table.get('document', 'unknown'), table['label'])
+                raise ValueError(f'Table {document}.{label} %s contains incorrect number of columns')
+                # return None
+
+        self.table_tracker.register_table(
+            document,
+            label,
+            n_rows=len(rows),
+            broken=broken,
+            n_rows_skipped=len([row for row in rows if row[0].get('skipped')]) if broken else None,
+            n_rows_updated=len([row for row in rows if row[0].get('updated')]) if broken else None
+        )
 
         return row_embeddings, col_embeddings
 
@@ -243,7 +220,7 @@ class StructuredEmbedder:
                 )
                 self.set_element_embedding(element, embedding)
 
-    def train(self, elements: list[dict], optimizer: optim.Adam, batch_size: int = 8, max_length: int = 512, epochs: int = 20):
+    def train(self, elements: list[dict], optimizer: optim.Adam, batch_size: int = 8, max_length: int = 512, epochs: int = 20, table_tracker_export_path: str = 'assets/broken-tables.yml'):
         paragraph_id_to_embedding = {}
 
         for element in elements:
@@ -294,6 +271,15 @@ class StructuredEmbedder:
                         batch_count += 1
 
                         # print(f'Batch loss: {avg_batch_loss.item():.4f}')
+
+            if i == 0:
+                n_broken, mean_correctness_ratio = self.table_tracker.count_broken()
+                n_total = self.table_tracker.count()
+
+                self.table_tracker.export(table_tracker_export_path)
+
+                print(f'Broken: {n_broken} / {n_total} ({n_broken / n_total * 100:.3f}%)')
+                print(f'Mean correctness ratio of the broken tables = {mean_correctness_ratio:.3f}')
 
             if batch_count > 0:
                 print(f'[{i} / {epochs}] Average epoch loss: {total_loss / batch_count:.4f}')
