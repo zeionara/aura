@@ -136,14 +136,18 @@ class StructuredEmbedder:
                                     break_outer_loop = True
                                     break
 
-                                if len(row) == 1:
+                                if len(row) == 1 and not row[0].get('updated'):
                                     row[0]['cols'] = sum(c['cols'] for c in rows[i - 1])
+
+                                    row[0]['updated'] = True
 
                                     break_outer_loop = True
                                     break
 
-                                if len(row) > 1 and len(rows[i - 1]) == 1:
+                                if len(row) > 1 and len(rows[i - 1]) == 1 and not row[0].get('updated'):
                                     row[-1]['cols'] = rows[i - 1][0]['cols'] - sum(c['cols'] for c in row)
+
+                                    row[0]['updated'] = True
 
                                     break_outer_loop = True
                                     break
