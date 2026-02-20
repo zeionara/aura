@@ -203,32 +203,39 @@ def train(dataset_id: str, model: BaseModel, cpu: bool, input_dim: int):
 
     elements = []
 
+    n_files = 0
+
+    for root, _, files in walk(input_path):
+        for filename in files:
+            n_files += 1
+
+    i_file = 1
+
     for root, _, files in walk(input_path):
         for filename in files:
             if not filename.endswith('json'):
                 continue
 
-            print(f'Reading {filename}...')
+            logger.info('Reading %s (%d / %d)...', filename, i_file, n_files)
+
+            i_file += 1
 
             with open(os_path.join(root, filename), 'r') as file:
                 data = load(file)
 
-            for element in elements:
+            for element in data['elements']:
                 element['document'] = filename
 
             elements.extend(data['elements'])
 
-    print()
-    print('Training...')
-    print()
+    logger.info('Training...')
 
     optimizer = optim.Adam(embedder.model.parameters(), lr=1e-4)
     embedder.train(elements, optimizer)
 
     embedder.save(output_path)
 
-    print()
-    print(f'Saved as {output_path}')
+    logger.info('Saved as %s', output_path)
 
 
 @main.command()
