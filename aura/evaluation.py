@@ -90,6 +90,10 @@ def evaluate(elements):
         elif elem['type'] == 'table':
             tables.append(elem)
 
+    n_tables = len(tables)
+
+    # logger.info('N tables: %d', n_tables)
+
     para_embeddings = {}
     for para in paragraphs:
         pid = para['id']
@@ -258,6 +262,9 @@ def evaluate(elements):
 
     # Create multi-index dataframe if we have results
     if not rows:
+        if n_tables > 0:
+            raise ValueError()
+
         return pd.DataFrame()
 
     df = pd.DataFrame(rows)
@@ -271,7 +278,7 @@ def evaluate(elements):
         names=['Evaluation Metric', 'Distance Metric']
     )
 
-    print(df)
+    logger.info(df)
 
     return df
 

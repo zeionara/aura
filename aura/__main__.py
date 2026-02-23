@@ -258,9 +258,7 @@ def eval(dataset_id: str):
             if not filename.endswith('json'):
                 continue
 
-            print()
-            print(filename)
-            print()
+            logger.info(filename)
 
             with open(os_path.join(root, filename), 'r', encoding = 'utf-8') as file:
                 data = load(file)
