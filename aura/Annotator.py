@@ -1,5 +1,6 @@
 import re
 from time import time
+from json.decoder import JSONDecodeError
 from string import punctuation
 from os import path as os_path, mkdir, walk
 from logging import getLogger, INFO, ERROR, WARNING, DEBUG
@@ -347,7 +348,11 @@ class Annotator:
                 if os_path.isfile(output_filename):
                     # logger.info('%s - File "%s" already exists. Moving forward', file, output_filename)
                     # previous_annotations = dict_from_json_file(output_filename)
-                    previous_annotations = Annotations.from_file(output_filename)
+                    try:
+                        previous_annotations = Annotations.from_file(output_filename)
+                    except JSONDecodeError:
+                        logger.error(f'Error handling file {output_filename}')
+                        raise
 
                     # previous_annotations_values = list(previous_annotations.values())  # synchronize existing paragraph ids and new paragraph ids
 
