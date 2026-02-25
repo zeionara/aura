@@ -181,7 +181,7 @@ The full dataset contains **410** files. This dataset was split into parts, and 
 If you have a collection of `.docx` documents with tables that you'd like to annotate, here is a sequence of commands that you would apply. Suppose the documents are placed in the folder `assets/data/default/source`, then first, generate paragraph annotations using LLM:
 
 ```sh
-python -m aura annotate assets/data/default/source assets/data/default/annotations --batch-size 10
+python -m aura annotate default --batch-size 10
 ```
 
 To view annotation stats:

@@ -141,13 +141,15 @@ def apply(input_path: str, annotations_path: str, output_path: str, threshold: f
 
 
 @main.command()
-@argument('input-path', type = str, default = RAW_DATA_PATH)
-@argument('output-path', type = str, default = ANNOTATIONS_PATH)
+@argument('dataset-id', type = str)
 @option('--batch-size', '-b', type = int, default = None)
 @option('--n-batches', '-n', type = int, default = None)
 @option('--ckpt-period', '-c', type = int, default = 2)
 @option('--no-concurrency', '-x', is_flag = True)
-def annotate(input_path: str, output_path: str, batch_size: int, n_batches: int, ckpt_period: int, no_concurrency: bool):
+def annotate(dataset_id: str, batch_size: int, n_batches: int, ckpt_period: int, no_concurrency: bool):
+    source_path = SOURCE_PATH_TEMPLATE.format(dataset_id = dataset_id)
+    annotations_path = ANNOTATIONS_PATH_TEMPLATE.format(dataset_id = dataset_id)
+
     annotator = Annotator(
         llm_configs = [
             {
@@ -156,24 +158,11 @@ def annotate(input_path: str, output_path: str, batch_size: int, n_batches: int,
                 'model': getenv('AURA_VLLM_MODEL'),
                 'system_prompt': make_system_prompt(),
                 'label': getenv('AURA_VLLM_LABEL')
-            },
-            # VllmClient(
-            #     getenv('AURA_VLLM_HOST'),
-            #     int(getenv('AURA_VLLM_PORT')),
-            #     getenv('AURA_VLLM_MODEL'),
-            #     make_system_prompt(),
-            #     label = getenv('AURA_VLLM_LABEL') + "-duplicate"
-            # ),
-            # GigaChatClient(
-            #     getenv('AURA_GIGACHAT_AUTHORIZATION_KEY'),
-            #     GigaChatModel(getenv('AURA_GIGACHAT_MODEL')),
-            #     make_system_prompt(),
-            #     label = getenv('AURA_GIGACHAT_LABEL')
-            # )
+            }
         ]
     )
 
-    annotator.annotate(input_path, output_path, batch_size, n_batches, ckpt_period = ckpt_period, concurrent = not no_concurrency)
+    annotator.annotate(source_path, annotations_path, batch_size, n_batches, ckpt_period = ckpt_period, concurrent = not no_concurrency)
 
 
 @main.command()
