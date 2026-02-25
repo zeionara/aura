@@ -440,7 +440,7 @@ def handle_file(args):
         ) else '. Annotation is incomplete 🔴'
     )
 
-    report = AnnotationReport(file, n_tables, n_paragraphs, complete)
+    report = AnnotationReport(file[:-5], n_tables, n_paragraphs, complete)
 
     tables_counter = 0
 
@@ -616,7 +616,18 @@ class Annotator:
             self.workers.map(handle_file, iterables)
 
         if len(reports) > 0:
+            logger.info('Total n documents: %d', len(reports))
             logger.info('Total n tables: %d', sum(report.n_tables for report in reports))
             logger.info('Total n paragraphs: %d', sum(report.n_paragraphs for report in reports))
-            logger.info('Total n documents with tables: %d / %d', sum(report.n_tables > 0 for report in reports), n_documents := len(reports))
-            logger.info('Total n incomplete documents: %d / %d', sum(not report.complete for report in reports), n_documents)
+            logger.info('Total n incomplete documents: %d / %d', sum(not report.complete for report in reports), n_documents := len(reports))
+            logger.info('Total n documents with tables: %d / %d', sum(report.n_tables > 0 for report in reports), n_documents)
+
+            logger.info('All documents:')
+
+            for document in sorted([report.document for report in reports]):
+                logger.info('  %s', document)
+
+            logger.info('Documents without tables:')
+
+            for document in sorted([report.document for report in reports if report.n_tables < 1]):
+                logger.info('  %s', document)

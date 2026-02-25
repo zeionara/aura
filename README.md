@@ -174,7 +174,7 @@ The full dataset contains **410** files. This dataset was split into parts, and 
 | `2026.02.02.05` | Yes | Yes | No | Contains the same **205** documents as `2026.02.02.02` but without missing scores for files in `2026.02.02.04` |
 | `2026.02.02.06` | Yes | Yes | No | Contains the **205** documents from `2026.02.02.05` + `flat` and `structured` vectors from `DeepPavlov/rubert-base-cased` and `intfloat/multilingual-e5-large-instruct` |
 | `2026.02.02.07` | Yes | Yes | No | Contains the **205** documents from `2026.02.02.05` + `flat` and `structured` vectors from `DeepPavlov/rubert-base-cased`, `intfloat/multilingual-e5-large-instruct` and `Qwen/Qwen3-Embedding-0.6B` |
-| `2026.02.20.01` | Yes | Yes | No | Contains the **205** documents from `2026.02.02.05` + `flat` and `structured` vectors from `DeepPavlov/rubert-base-cased` and `intfloat/multilingual-e5-large-instruct` with better algorithm for processing broken tables |
+| [`2026.02.20.01`](/assets/data/vol.1) | Yes | Yes | No | Contains the **205** documents from `2026.02.02.05` + `flat` and `structured` vectors from `DeepPavlov/rubert-base-cased` and `intfloat/multilingual-e5-large-instruct` with better algorithm for processing broken tables |
 
 ### The automatic workflow
 
