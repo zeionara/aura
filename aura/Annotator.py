@@ -5,6 +5,7 @@ from os import path as os_path, mkdir, walk
 from logging import getLogger
 from concurrent.futures import ThreadPoolExecutor
 from threading import get_ident
+from json.decoder import JSONDecodeError
 
 from .LLMClient import LLMClient
 from .VllmClient import VllmClient
@@ -315,7 +316,12 @@ def handle_file(args):
     if os_path.isfile(output_filename):
         # logger.info('%s - File "%s" already exists. Moving forward', file, output_filename)
         # previous_annotations = dict_from_json_file(output_filename)
-        previous_annotations = Annotations.from_file(output_filename)
+
+        try:
+            previous_annotations = Annotations.from_file(output_filename)
+        except JSONDecodeError:
+            logger.error('Error handling file %s', output_filename)
+            raise
 
         # previous_annotations_values = list(previous_annotations.values())  # synchronize existing paragraph ids and new paragraph ids
 
