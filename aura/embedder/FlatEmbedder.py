@@ -98,7 +98,7 @@ class FlatEmbedder:
         else:
             flat_embeddings[self.model_name] = embedding_to_list(embedding)
 
-    def embed(self, elements: list[dict], batch_size: int = 4, max_length: int = 512):
+    def embed(self, elements: list[dict], batch_size: int = 4, max_length: int = 512):  # set batch size to 2 for Qwen/Qwen3-Embedding-0.6B to avoid OOM error on RTX 4080
         batches = split_into_batches(elements, batch_size)
 
         for batch in batches:
