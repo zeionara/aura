@@ -278,7 +278,6 @@ def make_table_header(table_label_candidates: list[str]):
     return label
 
 
-# def handle_file(llm_configs: list[dict], input_root: str, input_filename: str, output_path: str, batch_size: int, n_batches: int, table_label_search_window: int, ckpt_period: int):
 def handle_file(args):
     llm_configs, input_root, input_filename, output_path, batch_size, n_batches, table_label_search_window, ckpt_period, concurrent = args
 
@@ -315,16 +314,11 @@ def handle_file(args):
     n_table_elements = 0
 
     if os_path.isfile(output_filename):
-        # logger.info('%s - File "%s" already exists. Moving forward', file, output_filename)
-        # previous_annotations = dict_from_json_file(output_filename)
-
         try:
             previous_annotations = Annotations.from_file(output_filename)
         except JSONDecodeError:
             logger.error('Error handling file %s', output_filename)
             raise
-
-        # previous_annotations_values = list(previous_annotations.values())  # synchronize existing paragraph ids and new paragraph ids
 
         logger.debug('Found %d tables in the previous annotation results', previous_annotations.n_tables)
 
@@ -422,12 +416,10 @@ def handle_file(args):
 
             annotations[label] = {
                 'type': 'table',
-                # 'paragraphs': []
                 'paragraphs': [] if previous_annotations is None else previous_annotations.table_to_paragraphs.get(label, {'paragraphs': []})['paragraphs']
             }
             table.label = label
             logger.debug('%s - Found table %s - %d x %d', file, label, table.n_rows, table.n_cols)
-            # logger.debug('%s - Table %s - %d x %d Content: %s', file, label, table.n_rows, table.n_cols, ', '.join(f'"{cell}"' for cell in table.cells))
 
             table_label_candidates = []
 
@@ -450,16 +442,7 @@ def handle_file(args):
 
     report = AnnotationReport(file, n_tables, n_paragraphs, complete)
 
-    # logger.info(
-    #     '%s - Found %d tables (%d table elements) and %d paragraphs',
-    #     file,
-    #     report.n_tables,
-    #     n_table_elements,
-    #     report.n_paragraphs
-    # )
-
     tables_counter = 0
-    # tables_total = len(tables)
 
     if llm_configs is None:
         return report
@@ -481,13 +464,9 @@ def handle_file(args):
             previous_table_annotations := get_previous_table_annotations(table.label, None if previous_annotations is None else previous_annotations.table_to_paragraphs)
         )
 
-        table_label = f'{table.label} [{tables_counter} / {report.n_tables}]'
+        table_label = f'{table.label} [{tables_counter} / {n_tables}]'
 
         logger.debug('%s - Table %s - Annotation started', file, table_label)
-
-        # for llm in llms:
-        #     if len(llm_to_batched_paragraphs[llm.label]) > 0:
-        #         llm.reset()
 
         for llm in llms:
             if len(llm_to_batched_paragraphs[llm.label]) > 0:
@@ -531,25 +510,6 @@ def handle_file(args):
                         except ValueError:
                             logger.error('%s - Too many tokens in table %s', file, table_label)
                             raise
-
-                        # try:
-                        #     completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
-                        # except ValueError:
-                        #     prompt = make_annotation_prompt(
-                        #         table = Cell.serialize_rows(
-                        #             table.rows,
-                        #             with_embeddings = False
-                        #         ),
-                        #         squeeze_rows = True,
-                        #         squeeze_cols = True
-                        #     )
-
-                        #     try:
-                        #         print(prompt)
-                        #         completion = llm.complete(prompt)  # Initialize table annotation by describing the table and giving a set of instructions
-                        #     except ValueError:
-                        #         logger.error('%s - Too many tokens in table %s', file, table_label)
-                        #         raise
 
                     logger.debug('%s - Table %s - LLM "%s" response to the initialization message: "%s"', file, table_label, llm.label, completion)
 
@@ -660,10 +620,3 @@ class Annotator:
             logger.info('Total n paragraphs: %d', sum(report.n_paragraphs for report in reports))
             logger.info('Total n documents with tables: %d / %d', sum(report.n_tables > 0 for report in reports), n_documents := len(reports))
             logger.info('Total n incomplete documents: %d / %d', sum(not report.complete for report in reports), n_documents)
-            # logger.info(
-            #     'Found %d tables and %d paragraphs, %d / %d documents are incomplete',
-            #     n_tables,
-            #     n_paragraphs,
-            #     files_incomplete,
-            #     files_total
-            # )
