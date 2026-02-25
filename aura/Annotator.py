@@ -433,15 +433,30 @@ def handle_file(args):
 
             tables.append(table)
 
-    report = AnnotationReport(document=file, n_tables=len(tables), n_paragraphs=len(paragraphs))
+    complete = None
 
     logger.info(
-        '%s - Found %d tables (%d table elements) and %d paragraphs',
+        '%s - Found %d tables (%d table elements) and %d paragraphs%s',
         file,
-        report.n_tables,
+        n_tables := len(tables),
         n_table_elements,
-        report.n_paragraphs
+        n_paragraphs := len(paragraphs),
+        '' if llm_configs is not None else '. Annotation is complete 🟢' if (
+            complete := (
+                False if previous_annotations is None else previous_annotations.is_complete(n_tables, n_paragraphs)
+            )
+        ) else '. Annotation is incomplete 🔴'
     )
+
+    report = AnnotationReport(file, n_tables, n_paragraphs, complete)
+
+    # logger.info(
+    #     '%s - Found %d tables (%d table elements) and %d paragraphs',
+    #     file,
+    #     report.n_tables,
+    #     n_table_elements,
+    #     report.n_paragraphs
+    # )
 
     tables_counter = 0
     # tables_total = len(tables)
@@ -642,8 +657,9 @@ class Annotator:
 
         if len(reports) > 0:
             logger.info('Total n tables: %d', sum(report.n_tables for report in reports))
-            logger.info('Total n documents with tables: %d / %d', sum(report.n_tables > 0 for report in reports), len(reports))
             logger.info('Total n paragraphs: %d', sum(report.n_paragraphs for report in reports))
+            logger.info('Total n documents with tables: %d / %d', sum(report.n_tables > 0 for report in reports), n_documents := len(reports))
+            logger.info('Total n incomplete documents: %d / %d', sum(not report.complete for report in reports), n_documents)
             # logger.info(
             #     'Found %d tables and %d paragraphs, %d / %d documents are incomplete',
             #     n_tables,

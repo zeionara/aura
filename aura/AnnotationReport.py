@@ -6,3 +6,4 @@ class AnnotationReport:
     document: str
     n_tables: int
     n_paragraphs: int
+    complete: bool = None
