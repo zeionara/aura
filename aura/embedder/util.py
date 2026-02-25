@@ -7,14 +7,17 @@ def to_cuda(data: dict):
     return data_on_cuda
 
 
-def drop_embeddings(cells: list[dict]):
-    return [
-        {
-            'id': cell.get('id'),
-            'text': cell.get('text'),
-            'rows': cell.get('rows'),
-            'cols': cell.get('cols'),
-            'updated': cell.get('updated')
-        }
-        for cell in cells
-    ]
+def describe(table: dict):
+    return {
+        'rows': [
+            [
+                {
+                    'text': cell.get('text'),
+                    'rows': cell.get('rows'),
+                    'cols': cell.get('cols'),
+                }
+                for cell in row
+            ]
+            for row in table['rows']
+        ]
+    }

@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from .AttentionTableEmbedder import AttentionTableEmbedder, DEFAULT_INPUT_DIM
 from .FlatEmbedder import embedding_to_list
 from .BaseModel import BaseModel
-from .util import to_cuda, drop_embeddings
+from .util import to_cuda
 from ..Subset import Subset
 from .TableTracker import TableTracker
 

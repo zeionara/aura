@@ -3,6 +3,8 @@
 ```sh
 Total n documents: 205
 Total n tables: 1923
+Generated + missing n table labels: 222
+Missing n table labels: 15
 Total n paragraphs: 106808
 Total n incomplete documents: 0 / 205
 Total n documents with tables: 187 / 205

@@ -7,6 +7,7 @@ from sklearn.metrics import ndcg_score
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 
 from .Subset import Subset
+from .embedder.util import describe
 
 
 logger = getLogger(__name__)
@@ -263,7 +264,9 @@ def evaluate(elements):
     # Create multi-index dataframe if we have results
     if not rows:
         if n_tables > 0:
-            raise ValueError()
+            logger.debug('Missing evaluation results when there are tables in the document:')
+            for table in tables:
+                logger.debug(describe(table))
 
         return pd.DataFrame()
 
@@ -306,8 +309,8 @@ def average(dataframes):
         if not df.empty:
             non_empty_dataframes.append(df)
 
-    print('N total dfs:', len(dataframes))
-    print('N non-empty dfs:', len(non_empty_dataframes))
+    logger.info('N total dfs: %d', len(dataframes))
+    logger.info('N non-empty dfs: %d', len(non_empty_dataframes))
 
     # Create 3D array of all DataFrame values
     all_values = np.array([df.values for df in non_empty_dataframes])

@@ -253,7 +253,11 @@ def eval(dataset_id: str):
                 data = load(file)
 
             df = run_evaluation(data['elements'])
-            dfs.append(df)
+
+            if df.empty:
+                logger.warning('Empty evaluation results for file %s', filename)
+            else:
+                dfs.append(df)
 
     average_df = average(dfs)
     average_df.to_csv(output_path, sep = '\t')

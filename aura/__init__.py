@@ -1,4 +1,4 @@
-from logging import getLogger, StreamHandler, INFO, DEBUG, Formatter
+from logging import getLogger, StreamHandler, INFO, DEBUG, WARNING, Formatter
 
 root = getLogger()
 

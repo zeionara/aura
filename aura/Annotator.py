@@ -313,6 +313,8 @@ def handle_file(args):
     previous_paragraph_ids = None
     n_table_elements = 0
 
+    generated_label_count = 0
+
     if os_path.isfile(output_filename):
         try:
             previous_annotations = Annotations.from_file(output_filename)
@@ -401,9 +403,11 @@ def handle_file(args):
             if label is None:  # Try to generate table name from seen candidates
                 label = make_table_header(seen_candidates)
                 logger.warning('%s - Had to generate table name "%s"', file, label)
+                generated_label_count += 1
 
             if label is None:
                 missing_label_count += 1
+                generated_label_count -= 1
                 label = f'таблица без названия {missing_label_count}'
 
             label = label.replace('(справочное)', '')
@@ -440,7 +444,7 @@ def handle_file(args):
         ) else '. Annotation is incomplete 🔴'
     )
 
-    report = AnnotationReport(file[:-5], n_tables, n_paragraphs, complete)
+    report = AnnotationReport(file[:-5], n_tables, n_paragraphs, generated_label_count, missing_label_count, complete)
 
     tables_counter = 0
 
@@ -618,6 +622,8 @@ class Annotator:
         if len(reports) > 0:
             logger.info('Total n documents: %d', len(reports))
             logger.info('Total n tables: %d', sum(report.n_tables for report in reports))
+            logger.info('Generated + missing n table labels: %d', sum(report.n_generated_labels + report.n_missing_labels for report in reports))
+            logger.info('Missing n table labels: %d', sum(report.n_missing_labels for report in reports))
             logger.info('Total n paragraphs: %d', sum(report.n_paragraphs for report in reports))
             logger.info('Total n incomplete documents: %d / %d', sum(not report.complete for report in reports), n_documents := len(reports))
             logger.info('Total n documents with tables: %d / %d', sum(report.n_tables > 0 for report in reports), n_documents)
