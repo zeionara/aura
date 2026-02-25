@@ -12,6 +12,7 @@ from .VllmClient import VllmClient
 from .util import make_annotation_prompt, read_elements, dict_to_string, string_to_dict, dict_to_json_file, normalize_spaces
 from .document import Paragraph, Cell, Table
 from .Annotations import Annotations
+from .AnnotationReport import AnnotationReport
 
 
 logger = getLogger(__name__)
@@ -432,19 +433,21 @@ def handle_file(args):
 
             tables.append(table)
 
+    report = AnnotationReport(document=file, n_tables=len(tables), n_paragraphs=len(paragraphs))
+
     logger.info(
         '%s - Found %d tables (%d table elements) and %d paragraphs',
         file,
-        len(tables),
+        report.n_tables,
         n_table_elements,
-        len(paragraphs)
+        report.n_paragraphs
     )
 
     tables_counter = 0
-    tables_total = len(tables)
+    # tables_total = len(tables)
 
     if llm_configs is None:
-        return
+        return report
 
     for table in tables:
         tables_counter += 1
@@ -463,7 +466,7 @@ def handle_file(args):
             previous_table_annotations := get_previous_table_annotations(table.label, None if previous_annotations is None else previous_annotations.table_to_paragraphs)
         )
 
-        table_label = f'{table.label} [{tables_counter} / {tables_total}]'
+        table_label = f'{table.label} [{tables_counter} / {report.n_tables}]'
 
         logger.debug('%s - Table %s - Annotation started', file, table_label)
 
@@ -594,6 +597,8 @@ def handle_file(args):
 
     logger.info('%s - Annotation completed in %.3f seconds, results saved as "%s"', file, time() - start_file, output_filename)
 
+    return report
+
 
 class Annotator:
     def __init__(self, llm_configs: list[dict], n_workers: int = 16):
@@ -627,8 +632,22 @@ class Annotator:
                     )
                 )
 
+        reports = []
+
         if concurrent is False or self.llm_configs is None:
             for iterable in iterables:
-                handle_file(iterable)
+                reports.append(handle_file(iterable))
         else:
             self.workers.map(handle_file, iterables)
+
+        if len(reports) > 0:
+            logger.info('Total n tables: %d', sum(report.n_tables for report in reports))
+            logger.info('Total n documents with tables: %d / %d', sum(report.n_tables > 0 for report in reports), len(reports))
+            logger.info('Total n paragraphs: %d', sum(report.n_paragraphs for report in reports))
+            # logger.info(
+            #     'Found %d tables and %d paragraphs, %d / %d documents are incomplete',
+            #     n_tables,
+            #     n_paragraphs,
+            #     files_incomplete,
+            #     files_total
+            # )
